@@ -3,10 +3,10 @@
 
 namespace Kawayi.CommandLine.Core.Attributes;
 
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class CommandAttribute : SymbolAttribute
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ArgumentAttribute: SymbolAttribute
 {
-    public CommandAttribute() : base(true, false)
+    public ArgumentAttribute(bool visible, bool require) : base(visible, require)
     {
     }
 }
