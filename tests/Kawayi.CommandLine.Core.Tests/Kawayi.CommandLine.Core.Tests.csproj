@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\sources\managed\Kawayi.CommandLine.Core\Kawayi.CommandLine.Core.csproj" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\sources\managed\Kawayi.CommandLine.ExitCodes\Kawayi.CommandLine.ExitCodes.csproj" />
+  </ItemGroup>
+
+</Project>

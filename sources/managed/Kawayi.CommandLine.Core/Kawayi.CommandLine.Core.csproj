@@ -1,0 +1,6 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Kawayi.CommandLine.Abstractions\Kawayi.CommandLine.Abstractions.csproj" />
+    <ProjectReference Include="..\Kawayi.Escapes\Kawayi.Escapes.csproj" />
+  </ItemGroup>
+</Project>

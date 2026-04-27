@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <_ProjectFileText>$([System.IO.File]::ReadAllText('$(MSBuildProjectFullPath)'))</_ProjectFileText>
+    <_HasProjectFileExplicitVersion>false</_HasProjectFileExplicitVersion>
+    <_HasProjectFileExplicitVersion Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(_ProjectFileText)', '&lt;(?:Version|PackageVersion|AssemblyVersion|FileVersion|InformationalVersion)(?:\\s|&gt;)'))">true</_HasProjectFileExplicitVersion>
+
+    <MinVerSkip Condition="'$(_HasExternalExplicitVersion)' == 'true' Or '$(_HasProjectFileExplicitVersion)' == 'true'">true</MinVerSkip>
+
+  </PropertyGroup>
+</Project>

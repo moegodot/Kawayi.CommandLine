@@ -14,7 +14,7 @@
   <Folder Name="/building/" />
   <Folder Name="/.github/" />
   <Folder Name="/.github/workflows/">
-    <File Path=".github/workflows/build-and-test.yaml"/>
+    <File Path=".github/workflows/build-and-test.yaml" />
   </Folder>
   <Folder Name="/.codex/">
     <File Path=".codex/config.toml" />
@@ -26,10 +26,20 @@
   <Folder Name="/samples/">
   </Folder>
   <Folder Name="/sources/" />
+  <Folder Name="/sources/managed/">
+    <Project Path="sources/managed/Kawayi.CommandLine.Abstractions/Kawayi.CommandLine.Abstractions.csproj" />
+    <Project Path="sources/managed/Kawayi.CommandLine.Core/Kawayi.CommandLine.Core.csproj" />
+    <Project Path="sources/managed/Kawayi.CommandLine.ExitCodes/Kawayi.CommandLine.ExitCodes.csproj" />
+    <Project Path="sources/managed/Kawayi.CommandLine.Extensions/Kawayi.CommandLine.Extensions.csproj" />
+    <Project Path="sources/managed/Kawayi.CommandLine.Generator/Kawayi.CommandLine.Generator.csproj" />
+    <Project Path="sources/managed/Kawayi.Escapes/Kawayi.Escapes.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Kawayi.CommandLine.Core.Tests/Kawayi.CommandLine.Core.Tests.csproj" />
+    <Project Path="tests/Kawayi.CommandLine.ExitCodes.Tests/Kawayi.CommandLine.ExitCodes.Tests.csproj" />
+    <Project Path="tests/Kawayi.Escapes.Tests/Kawayi.Escapes.Tests.csproj" />
   </Folder>
   <Folder Name="/vendors/" />
   <Folder Name="/benchmarks/" />
   <Folder Name="/documents/" />
 </Solution>
-
