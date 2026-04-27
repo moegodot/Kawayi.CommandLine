@@ -4,8 +4,7 @@
 namespace Kawayi.CommandLine.Abstractions;
 
 public record ProgramInformation(string Name,
-                                 string ConciseDescription,
-                                 string HelpText,
+                                 Document Document,
                                  Version Version,
                                  string Homepage)
 {

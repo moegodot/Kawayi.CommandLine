@@ -9,7 +9,7 @@ namespace Kawayi.CommandLine.Core.Tests;
 public sealed class ContainersTests
 {
     private static readonly ParsingOptions DefaultOptions = new(
-        new ProgramInformation("test", "test", "test", new Version(1, 0), "https://example.com"));
+        new ProgramInformation("test", new("test", "test"), new Version(1, 0), "https://example.com"));
 
     [Test]
     public async Task CreateParsing_Returns_Empty_Containers_When_No_Arguments_Are_Provided()

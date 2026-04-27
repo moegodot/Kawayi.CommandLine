@@ -9,7 +9,8 @@ public sealed record ParsingOptions(
     ProgramInformation Program,
     ImmutableHashSet<Token> VersionFlags,
     ImmutableHashSet<Token> HelpFlags,
-    TextWriter Output
+    TextWriter Output,
+    bool EnableStyle
 )
 {
     public static ImmutableHashSet<Token> DefaultVersionFlags
@@ -54,8 +55,29 @@ public sealed record ParsingOptions(
         }
     } = null!;
 
-    public ParsingOptions(ProgramInformation programInformation)
-    :this(programInformation, DefaultVersionFlags,DefaultHelpFlags,Console.Out)
+    private static bool? _defaultStyle = null;
+
+    public static bool DefaultStyle
+    {
+        get
+        {
+            if (_defaultStyle is null)
+            {
+                var nocolorEnv = Environment.GetEnvironmentVariable("NOCOLOR");
+                var ciEnv = Environment.GetEnvironmentVariable("CI");
+
+                var nocolor = (nocolorEnv ?? string.Empty).ToLowerInvariant() is "1" or "true" or "on" or "yes" or "y";
+                var ci = (nocolorEnv ?? string.Empty).ToLowerInvariant() is "1" or "true" or "on" or "yes" or "y";
+
+                _defaultStyle = !(nocolor || ci);
+            }
+
+            return _defaultStyle.Value;
+        }
+    }
+
+public ParsingOptions(ProgramInformation programInformation)
+    :this(programInformation, DefaultVersionFlags,DefaultHelpFlags,Console.Out,DefaultStyle)
     {
     }
 }
