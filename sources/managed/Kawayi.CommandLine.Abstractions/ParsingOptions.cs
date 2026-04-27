@@ -10,7 +10,8 @@ public sealed record ParsingOptions(
     ImmutableHashSet<Token> VersionFlags,
     ImmutableHashSet<Token> HelpFlags,
     TextWriter Output,
-    bool EnableStyle
+    bool EnableStyle,
+    bool Debug
 )
 {
     public static ImmutableHashSet<Token> DefaultVersionFlags
@@ -66,8 +67,8 @@ public sealed record ParsingOptions(
                 var nocolorEnv = Environment.GetEnvironmentVariable("NOCOLOR");
                 var ciEnv = Environment.GetEnvironmentVariable("CI");
 
-                var nocolor = (nocolorEnv ?? string.Empty).ToLowerInvariant() is "1" or "true" or "on" or "yes" or "y";
-                var ci = (nocolorEnv ?? string.Empty).ToLowerInvariant() is "1" or "true" or "on" or "yes" or "y";
+                var nocolor = IsTruthyEnvironmentValue(nocolorEnv);
+                var ci = IsTruthyEnvironmentValue(ciEnv);
 
                 _defaultStyle = !(nocolor || ci);
             }
@@ -76,8 +77,48 @@ public sealed record ParsingOptions(
         }
     }
 
-public ParsingOptions(ProgramInformation programInformation)
-    :this(programInformation, DefaultVersionFlags,DefaultHelpFlags,Console.Out,DefaultStyle)
+    private static bool? _defaultDebug = null;
+
+    public static bool DefaultDebug
     {
+        get
+        {
+            if (_defaultDebug is null)
+            {
+                _defaultDebug = IsTruthyEnvironmentValue(Environment.GetEnvironmentVariable("CLI_DEBUG"));
+            }
+
+            return _defaultDebug.Value;
+        }
+    }
+
+    public Style HelpTitleStyle { get; init; } = new(Color.Sky, Color.None, true, false, false);
+    public Style ProgramNameStyle { get; init; } = new(Color.Sky, Color.None, true, false, false);
+    public Style UsageLabelStyle { get; init; } = new(Color.Emerald, Color.None, true, false, false);
+    public Style UsageCommandStyle { get; init; } = new(Color.White, Color.None, true, false, false);
+    public Style SectionHeaderStyle { get; init; } = new(Color.Emerald, Color.None, true, false, false);
+    public Style OptionSignatureStyle { get; init; } = new(Color.White, Color.None, false, false, false);
+    public Style DefinitionNameStyle { get; init; } = new(Color.White, Color.None, false, false, false);
+    public Style MetavarStyle { get; init; } = new(Color.Amber, Color.None, false, false, true);
+    public Style DescriptionStyle { get; init; } = new(Color.Slate, Color.None, false, false, false);
+    public Style PossibleValuesLabelStyle { get; init; } = new(Color.Emerald, Color.None, false, false, false);
+    public Style PossibleValuesValueStyle { get; init; } = new(Color.Amber, Color.None, false, false, false);
+    public Style SecondaryTextStyle { get; init; } = new(Color.Slate, Color.None, false, false, false);
+    public Style DebugTitleStyle { get; init; } = new(Color.Sky, Color.None, true, false, false);
+    public Style DebugSuccessStyle { get; init; } = new(Color.Emerald, Color.None, true, false, false);
+    public Style DebugDeferredStyle { get; init; } = new(Color.Amber, Color.None, true, false, false);
+    public Style DebugFailureStyle { get; init; } = new(Color.Rose, Color.None, true, false, false);
+    public Style DebugLabelStyle { get; init; } = new(Color.Sky, Color.None, false, false, false);
+    public Style DebugValueStyle { get; init; } = new(Color.White, Color.None, false, false, false);
+    public Style DebugTokenStyle { get; init; } = new(Color.Amber, Color.None, false, false, true);
+
+    public ParsingOptions(ProgramInformation programInformation)
+    :this(programInformation, DefaultVersionFlags,DefaultHelpFlags,Console.Out,DefaultStyle,DefaultDebug)
+    {
+    }
+
+    private static bool IsTruthyEnvironmentValue(string? value)
+    {
+        return (value ?? string.Empty).ToLowerInvariant() is "1" or "true" or "on" or "yes" or "y";
     }
 }

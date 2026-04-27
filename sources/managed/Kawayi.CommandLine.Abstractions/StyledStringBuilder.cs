@@ -32,13 +32,31 @@ public sealed class StyledStringBuilder
 
     public StyledStringBuilder Append(Style style,string text)
     {
-        Builder.Append($"{style.ToAnsiCode()}{text}{Style.ClearStyle}");
+        if (!EnableStyle)
+        {
+            return Append(text);
+        }
+
+        var ansiCode = style.ToAnsiCode();
+
+        Builder.Append(ansiCode.Length == 0
+            ? text
+            : $"{ansiCode}{text}{Style.ClearStyle}");
         return this;
     }
 
     public StyledStringBuilder AppendLine(Style style,string text)
     {
-        Builder.Append($"{style.ToAnsiCode()}{text}{Style.ClearStyle}{NewLine}");
+        if (!EnableStyle)
+        {
+            return AppendLine(text);
+        }
+
+        var ansiCode = style.ToAnsiCode();
+
+        Builder.Append(ansiCode.Length == 0
+            ? $"{text}{NewLine}"
+            : $"{ansiCode}{text}{Style.ClearStyle}{NewLine}");
         return this;
     }
 

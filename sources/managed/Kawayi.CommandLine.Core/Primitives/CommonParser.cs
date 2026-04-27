@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
+using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
@@ -17,14 +18,16 @@ public sealed class CommonParser
       Abstractions.IParsable<TimeOnly>
 {
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, Guid initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "Guid",
               static (string value, out Guid result) => Guid.TryParse(value, out result));
 
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments,
                                               string initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "string",
               static (string value, out string result) =>
@@ -34,7 +37,8 @@ public sealed class CommonParser
               });
 
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, Uri initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "Uri at UriKind.RelativeOrAbsolute",
               static (string value, out Uri result) =>
@@ -50,28 +54,32 @@ public sealed class CommonParser
               });
 
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, DateTime initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "DateTime at DateTimeStyles.None",
               static (string value, out DateTime result) =>
                   DateTime.TryParse(value, null, DateTimeStyles.None, out result));
 
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, DateTimeOffset initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "DateTimeOffset at DateTimeStyles.None",
               static (string value, out DateTimeOffset result) =>
                   DateTimeOffset.TryParse(value, null, DateTimeStyles.None, out result));
 
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, DateOnly initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "DateOnly at DateTimeStyles.None",
               static (string value, out DateOnly result) =>
                   DateOnly.TryParse(value, null, DateTimeStyles.None, out result));
 
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, TimeOnly initialState) =>
-        Parse(arguments,
+        Parse(options,
+              arguments,
               initialState,
               "TimeOnly at DateTimeStyles.None",
               static (string value, out TimeOnly result) =>
@@ -79,23 +87,43 @@ public sealed class CommonParser
 
     private delegate bool TryParseDelegate<T>(string value, out T result);
 
-    private static ParsingResult Parse<T>(ImmutableArray<Token> arguments,
+    private static ParsingResult Parse<T>(ParsingOptions options,
+                                          ImmutableArray<Token> arguments,
                                           T initialState,
                                           string expect,
                                           TryParseDelegate<T> tryParse)
     {
+        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].RawValue;
+
         if (arguments.IsDefaultOrEmpty)
         {
-            return new ParsingFinished<T>(initialState);
+            return DebugOutput.Emit(options,
+                                    new ParsingFinished<T>(initialState),
+                                    new DebugContext(nameof(CommonParser),
+                                                     Tokens: arguments,
+                                                     TargetType: typeof(T),
+                                                     Expectation: expect));
         }
 
         var token = arguments[^1];
 
-        if (tryParse(token.RawValue, out var result))
+        if (tryParse(token.RawValue, out var parsedValue))
         {
-            return new ParsingFinished<T>(result);
+            return DebugOutput.Emit(options,
+                                    new ParsingFinished<T>(parsedValue),
+                                    new DebugContext(nameof(CommonParser),
+                                                     Tokens: arguments,
+                                                     TargetType: typeof(T),
+                                                     Expectation: expect,
+                                                     SelectedToken: selectedToken));
         }
 
-        return new InvalidArgumentDetected(token.RawValue, expect, null);
+        return DebugOutput.Emit(options,
+                                new InvalidArgumentDetected(token.RawValue, expect, null),
+                                new DebugContext(nameof(CommonParser),
+                                                 Tokens: arguments,
+                                                 TargetType: typeof(T),
+                                                 Expectation: expect,
+                                                 SelectedToken: selectedToken));
     }
 }

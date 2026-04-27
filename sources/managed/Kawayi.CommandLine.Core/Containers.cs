@@ -26,14 +26,19 @@ public class Containers
 
         if (!initialState.Container.IsConstructedGenericType)
         {
-            return CreateUnsupportedContainerResult(initialState.Container);
+            return EmitContainerDebug(options,
+                                      CreateUnsupportedContainerResult(initialState.Container),
+                                      arguments,
+                                      initialState);
         }
 
         var genericDefinition = initialState.Container.GetGenericTypeDefinition();
 
-        return IsDictionaryContainer(genericDefinition)
+        var result = IsDictionaryContainer(genericDefinition)
             ? CreateDictionaryParsing(options, arguments, initialState, genericDefinition)
             : CreateSequenceParsing(options, arguments, initialState, genericDefinition);
+
+        return EmitContainerDebug(options, result, arguments, initialState);
     }
 
     private static ParsingResult CreateSequenceParsing(ParsingOptions options,
@@ -175,7 +180,13 @@ public class Containers
     {
         if (targetType == typeof(string))
         {
-            return new ParsingFinished<string>(rawValue);
+            return DebugOutput.Emit(options,
+                                    new ParsingFinished<string>(rawValue),
+                                    new DebugContext(nameof(Containers),
+                                                     Tokens: [new ArgumentOrCommandToken(rawValue)],
+                                                     TargetType: targetType,
+                                                     SelectedToken: rawValue,
+                                                     Summary: "materialized string value"));
         }
 
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
@@ -272,6 +283,20 @@ public class Containers
 
         return new GotError(new NotSupportedException(
             $"Type '{targetType.FullName}' is not supported by {nameof(Containers)}."));
+    }
+
+    private static ParsingResult EmitContainerDebug(ParsingOptions options,
+                                                    ParsingResult result,
+                                                    ImmutableArray<Token> arguments,
+                                                    ContainerType containerType)
+    {
+        return DebugOutput.Emit(options,
+                                result,
+                                new DebugContext(nameof(Containers),
+                                                 Tokens: arguments,
+                                                 TargetType: containerType.Container,
+                                                 Expectation: containerType.Container.FullName
+                                                     ?? containerType.Container.Name));
     }
 
     private static bool TrySplitDictionaryEntry(string rawValue, out string key, out string value)

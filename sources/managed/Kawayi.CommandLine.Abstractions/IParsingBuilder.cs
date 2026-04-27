@@ -5,10 +5,11 @@ using System.Collections.Immutable;
 
 namespace Kawayi.CommandLine.Abstractions;
 
-public interface IParsingBuilder : IParsable<IParsingResultCollection>
+public interface IParsingBuilder
 {
     ParsingOptions ParsingOptions { get; }
-    ImmutableDictionary<string,CommandDefinition> Subcommands { get; }
-    ImmutableDictionary<string,PropertyDefinition> Properties { get; }
-    IList<ArgumentDefinition> Argument { get; }
+    ImmutableDictionary<string,CommandDefinition>.Builder SubcommandDefinitions { get; }
+    ImmutableDictionary<string,IParsingBuilder>.Builder Subcommands { get; }
+    ImmutableDictionary<string,PropertyDefinition>.Builder Properties { get; }
+    ImmutableList<ArgumentDefinition>.Builder Argument { get; }
 }

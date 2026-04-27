@@ -3,6 +3,7 @@
 
 using System.Collections.Immutable;
 using Kawayi.CommandLine.Abstractions;
+using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
@@ -12,18 +13,37 @@ public sealed class BooleanParser : Abstractions.IParsable<bool>
                                               ImmutableArray<Token> arguments,
                                               bool initialState)
     {
+        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].RawValue;
+
         if (arguments.IsDefaultOrEmpty)
         {
-            return new ParsingFinished<bool>(initialState);
+            return DebugOutput.Emit(options,
+                                    new ParsingFinished<bool>(initialState),
+                                    new DebugContext(nameof(BooleanParser),
+                                                     Tokens: arguments,
+                                                     TargetType: typeof(bool),
+                                                     Expectation: "bool"));
         }
 
         var token = arguments[^1];
 
-        if (bool.TryParse(token.RawValue, out var result))
+        if (bool.TryParse(token.RawValue, out var parsedValue))
         {
-            return new ParsingFinished<bool>(result);
+            return DebugOutput.Emit(options,
+                                    new ParsingFinished<bool>(parsedValue),
+                                    new DebugContext(nameof(BooleanParser),
+                                                     Tokens: arguments,
+                                                     TargetType: typeof(bool),
+                                                     Expectation: "bool",
+                                                     SelectedToken: selectedToken));
         }
 
-        return new InvalidArgumentDetected(token.RawValue, "bool", null);
+        return DebugOutput.Emit(options,
+                                new InvalidArgumentDetected(token.RawValue, "bool", null),
+                                new DebugContext(nameof(BooleanParser),
+                                                 Tokens: arguments,
+                                                 TargetType: typeof(bool),
+                                                 Expectation: "bool",
+                                                 SelectedToken: selectedToken));
     }
 }

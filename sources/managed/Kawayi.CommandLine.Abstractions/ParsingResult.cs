@@ -5,7 +5,7 @@ namespace Kawayi.CommandLine.Abstractions;
 
 public abstract record ParsingResult;
 
-public sealed record NeedToParse(IParsing ArgsParsing) : ParsingResult;
+public sealed record Subcommand(CommandDefinition Definition,Func<ParsingResult> CommandAction) : ParsingResult;
 
 public abstract record ParsingFinished(object UntypedResult) : ParsingResult;
 

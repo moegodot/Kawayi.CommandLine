@@ -17,13 +17,13 @@ public abstract record TypedDefinition(
     /// the factory to get the default value,
     /// input the parsing result and return the default value
     /// </summary>
-    public Func<object, object> DefaultValueFactory { get; init; }
+    public Func<object, object>? DefaultValueFactory { get; init; }
 
     /// <summary>
     /// validation of the value, called on any value(including default value),
     /// return null if the value is valid, or return the error message.
     /// </summary>
-    public Func<object, string?> Validation { get; init; }
+    public Func<object, string?>? Validation { get; init; }
 }
 
 public sealed record ArgumentDefinition(
@@ -31,7 +31,16 @@ public sealed record ArgumentDefinition(
     Symbol? ParentSymbol,
     ArgumentArity Arity,
     Type Type,
-    bool Requirement) : TypedDefinition(Information, ParentSymbol, Type, Requirement);
+    bool Requirement) : TypedDefinition(Information, ParentSymbol, Type, Requirement)
+{
+    /// <summary>
+    /// Defines how many values this positional argument may consume.
+    /// When multiple positional arguments are present, the parser assigns values greedily
+    /// from left to right while reserving enough values to satisfy later arguments'
+    /// minimum arity requirements.
+    /// </summary>
+    public ArgumentArity Arity { get; init; } = Arity;
+}
 
 public sealed record PropertyDefinition(
     DefinitionInformation Information,
@@ -40,4 +49,7 @@ public sealed record PropertyDefinition(
     Symbol? ParentSymbol,
     Type Type,
     bool Requirement)
-    : TypedDefinition(Information, ParentSymbol, Type, Requirement);
+    : TypedDefinition(Information, ParentSymbol, Type, Requirement)
+{
+    public PossibleValues? PossibleValues { get; init; }
+}
