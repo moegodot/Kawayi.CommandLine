@@ -1,22 +1,27 @@
 <Project>
     <PropertyGroup>
-        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-        <MicrosoftKitVersion>10.0.6</MicrosoftKitVersion>
+      <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+      <_MicrosoftKitVersion>10.0.6</_MicrosoftKitVersion>
+      <_CodeAnalysisVersion>5.0.0</_CodeAnalysisVersion>
+      <_BenchmarkDotNetVersion>0.15.8</_BenchmarkDotNetVersion>
+      <_MinVerVersion>7.0.0</_MinVerVersion>
+      <_TUnitVersion>1.28.0</_TUnitVersion>
+      <_NodaTimeVersion>3.3.1</_NodaTimeVersion>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageVersion Include="MinVer" Version="7.0.0"/>
-        <PackageVersion Include="TUnit" Version="1.28.0"/>
-        <PackageVersion Include="NodaTime" Version="3.3.1"/>
-        <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-        <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.0.0-1.25277.114"/>
-        <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.201"/>
-        <PackageVersion Include="Microsoft.CodeAnalysis" Version="5.0.0"/>
-        <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0"/>
-        <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0"/>
-        <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftKitVersion)"/>
-        <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftKitVersion)"/>
-        <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="$(MicrosoftKitVersion)"/>
-        <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftKitVersion)"/>
+      <PackageVersion Include="BenchmarkDotNet" Version="$(_BenchmarkDotNetVersion)" />
+      <PackageVersion Include="MinVer" Version="$(_MinVerVersion)"/>
+      <PackageVersion Include="TUnit" Version="$(_TUnitVersion)"/>
+      <PackageVersion Include="NodaTime" Version="$(_NodaTimeVersion)"/>
+      <PackageVersion Include="Microsoft.CodeAnalysis" Version="$(_CodeAnalysisVersion)"/>
+      <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(_CodeAnalysisVersion)"/>
+      <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="$(_CodeAnalysisVersion)" />
+      <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(_MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(_MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="$(_MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(_MicrosoftKitVersion)"/>
+      <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.0.0-1.25277.114"/>
+      <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.201"/>
     </ItemGroup>
 </Project>

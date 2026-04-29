@@ -8,4 +8,7 @@ Thumbs.db
 *.suo
 *.user
 target
+targets
 .nuget
+.snupkg
+nupkgs

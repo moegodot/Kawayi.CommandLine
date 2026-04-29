@@ -2,6 +2,7 @@
 
     <PropertyGroup>
       <PublishAot>true</PublishAot>
+      <IsPackable>true</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>

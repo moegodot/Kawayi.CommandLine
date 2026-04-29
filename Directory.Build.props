@@ -1,9 +1,7 @@
 <Project>
   <Import Project="$(MSBuildThisFileDirectory)/Project.props" />
-
   <PropertyGroup>
     <PackageProjectUrl>https://github.com/moegodot/Kawayi.CommandLine</PackageProjectUrl>
     <RepositoryUrl>https://github.com/moegodot/Kawayi.CommandLine</RepositoryUrl>
   </PropertyGroup>
-
 </Project>
