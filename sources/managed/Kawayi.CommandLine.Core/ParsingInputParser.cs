@@ -450,7 +450,7 @@ public sealed class ParsingInputParser : Abstractions.IParsable<ParsingInput>
             : new SectionEntry(name,
                                definition.Information.Document.ConciseDescription,
                                name,
-                               GetPossibleValues(definition.Type, null));
+                               null);
     }
 
     private static PropertySectionEntry? CreatePropertyEntry(PropertyDefinition definition)
@@ -466,7 +466,7 @@ public sealed class ParsingInputParser : Abstractions.IParsable<ParsingInput>
                                        valueName,
                                        definition.Information.Document.ConciseDescription,
                                        visibleNames[0],
-                                       GetPossibleValues(definition.Type, definition.PossibleValues));
+                                       GetPossibleValues(definition.PossibleValues));
     }
 
     private static SectionEntry? CreateSubcommandEntry(CommandDefinition definition)
@@ -641,16 +641,9 @@ public sealed class ParsingInputParser : Abstractions.IParsable<ParsingInput>
         return true;
     }
 
-    private static PossibleValues? GetPossibleValues(Type type, PossibleValues? explicitPossibleValues)
+    private static PossibleValues? GetPossibleValues(PossibleValues? explicitPossibleValues)
     {
-        if (explicitPossibleValues is not null)
-        {
-            return explicitPossibleValues;
-        }
-
-        return type.IsEnum
-            ? new CountablePossibleValues<string>([.. Enum.GetNames(type)])
-            : null;
+        return explicitPossibleValues;
     }
 
     private static string GetTypeDisplayName(Type type)
@@ -965,6 +958,11 @@ public sealed class ParsingInputParser : Abstractions.IParsable<ParsingInput>
             return PropertyBindingResult.CreateSuccess(optionIndex);
         }
 
+        if (property.Type == typeof(bool))
+        {
+            return BindBooleanProperty(arguments, optionIndex, property, scope);
+        }
+
         var valueIndex = optionIndex + 1;
 
         if (valueIndex >= arguments.Length)
@@ -977,6 +975,28 @@ public sealed class ParsingInputParser : Abstractions.IParsable<ParsingInput>
 
         scope.AddPropertyValue(property, NormalizeValueToken(arguments[valueIndex]));
         return PropertyBindingResult.CreateSuccess(valueIndex);
+    }
+
+    private static PropertyBindingResult BindBooleanProperty(ImmutableArray<Token> arguments,
+                                                             int optionIndex,
+                                                             PropertyDefinition property,
+                                                             ScopeParseState scope)
+    {
+        var valueIndex = optionIndex + 1;
+
+        if (valueIndex < arguments.Length)
+        {
+            var tokenText = GetTokenText(arguments[valueIndex]);
+
+            if (bool.TryParse(tokenText, out _))
+            {
+                scope.AddPropertyValue(property, new ArgumentOrCommandToken(tokenText));
+                return PropertyBindingResult.CreateSuccess(valueIndex);
+            }
+        }
+
+        scope.AddPropertyValue(property, new ArgumentOrCommandToken(bool.TrueString));
+        return PropertyBindingResult.CreateSuccess(optionIndex);
     }
 
     private static ParsingResult ParseDefinitionValue(ParsingOptions options,
@@ -1248,7 +1268,7 @@ public sealed class ParsingInputParser : Abstractions.IParsable<ParsingInput>
         };
     }
 
-    private static bool TryCreateContainerType(Type type, out ContainerType containerType)
+    private static bool TryCreateContainerType([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type type, out ContainerType containerType)
     {
         containerType = null!;
 

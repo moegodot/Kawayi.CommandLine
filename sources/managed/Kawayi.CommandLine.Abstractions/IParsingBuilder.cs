@@ -8,9 +8,9 @@ namespace Kawayi.CommandLine.Abstractions;
 public interface IParsingBuilder
 {
     ParsingOptions ParsingOptions { get; }
-    ImmutableDictionary<string,CommandDefinition>.Builder SubcommandDefinitions { get; }
-    ImmutableDictionary<string,IParsingBuilder>.Builder Subcommands { get; }
-    ImmutableDictionary<string,PropertyDefinition>.Builder Properties { get; }
+    ImmutableDictionary<string, CommandDefinition>.Builder SubcommandDefinitions { get; }
+    ImmutableDictionary<string, IParsingBuilder>.Builder Subcommands { get; }
+    ImmutableDictionary<string, PropertyDefinition>.Builder Properties { get; }
     ImmutableList<ArgumentDefinition>.Builder Argument { get; }
     ParsingInput Build();
 }

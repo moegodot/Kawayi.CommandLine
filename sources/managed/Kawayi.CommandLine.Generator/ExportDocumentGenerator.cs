@@ -14,13 +14,19 @@ namespace Kawayi.CommandLine.Generator;
 
 /// <summary>
 /// Generates <c>IDocumentExporter</c> implementations for types annotated with
-/// <c>ExportDocumentAttribute</c>.
+/// <c>ExportDocumentAttribute</c> or <c>CommandAttribute</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName =
         "Kawayi.CommandLine.Core.Attributes.ExportDocumentAttribute";
+
+    private const string CommandAttributeMetadataName =
+        "Kawayi.CommandLine.Core.Attributes.CommandAttribute";
+
+    private const string DocumentExporterMetadataName =
+        "Kawayi.CommandLine.Abstractions.IDocumentExporter";
 
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
@@ -44,12 +50,13 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var targets = context.SyntaxProvider.ForAttributeWithMetadataName(
-                fullyQualifiedMetadataName: AttributeMetadataName,
-                predicate: static (node, _) => node is TypeDeclarationSyntax,
-                transform: static (attributeContext, cancellationToken) =>
-                    CreateTarget(attributeContext, cancellationToken))
-            .Where(static target => target is not null);
+        var targets = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
+                transform: static (syntaxContext, cancellationToken) =>
+                    CreateTarget(syntaxContext, cancellationToken))
+            .Where(static target => target is not null)
+            .Collect()
+            .SelectMany(static (targets, _) => DistinctTargets(targets));
 
         context.RegisterSourceOutput(targets, static (productionContext, target) =>
         {
@@ -58,10 +65,25 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
     }
 
     private static ExportTarget? CreateTarget(
-        GeneratorAttributeSyntaxContext context,
+        GeneratorSyntaxContext context,
         CancellationToken cancellationToken)
     {
-        if (context.TargetSymbol is not INamedTypeSymbol typeSymbol)
+        if (context.Node is not TypeDeclarationSyntax declaration ||
+            context.SemanticModel.GetDeclaredSymbol(declaration, cancellationToken) is not INamedTypeSymbol typeSymbol)
+        {
+            return null;
+        }
+
+        var hasExportDocumentAttribute = HasAttribute(typeSymbol, AttributeMetadataName);
+        var hasCommandAttribute = HasAttribute(typeSymbol, CommandAttributeMetadataName);
+
+        if (!hasExportDocumentAttribute && !hasCommandAttribute)
+        {
+            return null;
+        }
+
+        if (!hasExportDocumentAttribute &&
+            typeSymbol.AllInterfaces.Any(static item => item.ToDisplayString() == DocumentExporterMetadataName))
         {
             return null;
         }
@@ -132,6 +154,17 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
 
     private static bool IsEligibleAccessibility(Accessibility accessibility) =>
         accessibility is Accessibility.Public or Accessibility.Protected or Accessibility.ProtectedOrInternal;
+
+    private static AttributeData? GetAttribute(ISymbol symbol, string metadataName)
+    {
+        return symbol.GetAttributes().FirstOrDefault(attribute =>
+            attribute.AttributeClass?.ToDisplayString() == metadataName);
+    }
+
+    private static bool HasAttribute(ISymbol symbol, string metadataName)
+    {
+        return GetAttribute(symbol, metadataName) is not null;
+    }
 
     private static INamedTypeSymbol? FindFirstMissingPartialType(INamedTypeSymbol typeSymbol)
     {
@@ -302,7 +335,8 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
             builder.Append('>');
         }
 
-        if (includeInterface)
+        if (includeInterface &&
+            !typeSymbol.AllInterfaces.Any(static item => item.ToDisplayString() == DocumentExporterMetadataName))
         {
             builder.Append(" : global::Kawayi.CommandLine.Abstractions.IDocumentExporter");
         }
@@ -379,6 +413,28 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
         var sanitizedName = new string(metadataName.Select(static character =>
             char.IsLetterOrDigit(character) ? character : '_').ToArray());
         return $"{sanitizedName}.ExportDocument.g.cs";
+    }
+
+    private static ImmutableArray<ExportTarget> DistinctTargets(ImmutableArray<ExportTarget?> targets)
+    {
+        var builder = ImmutableArray.CreateBuilder<ExportTarget>(targets.Length);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var target in targets)
+        {
+            if (target is null)
+            {
+                continue;
+            }
+
+            var key = target.TypeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+            if (seen.Add(key))
+            {
+                builder.Add(target);
+            }
+        }
+
+        return builder.ToImmutable();
     }
 
     private sealed class ExportTarget

@@ -12,13 +12,16 @@ namespace Kawayi.CommandLine.Generator;
 
 /// <summary>
 /// Generates <c>ISymbolExporter</c> implementations for types annotated with
-/// <c>ExportSymbolsAttribute</c>.
+/// <c>ExportSymbolsAttribute</c> or <c>CommandAttribute</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
 {
     private const string ExportSymbolsAttributeMetadataName =
         "Kawayi.CommandLine.Core.Attributes.ExportSymbolsAttribute";
+
+    private const string CommandAttributeMetadataName =
+        "Kawayi.CommandLine.Core.Attributes.CommandAttribute";
 
     private const string ExportDocumentAttributeMetadataName =
         "Kawayi.CommandLine.Core.Attributes.ExportDocumentAttribute";
@@ -47,6 +50,9 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
     private const string AliasAttributeMetadataName =
         "Kawayi.CommandLine.Core.Attributes.AliasAttribute";
 
+    private const string ValidatorAttributeMetadataName =
+        "Kawayi.CommandLine.Core.Attributes.ValidatorAttribute";
+
     private static readonly DiagnosticDescriptor NonPartialDiagnostic = new(
         id: "KCLG101",
         title: "ExportSymbols target must be partial",
@@ -58,7 +64,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor MissingDocumentExporterDiagnostic = new(
         id: "KCLG102",
         title: "ExportSymbols target must provide documents",
-        messageFormat: "Type '{0}' must implement IDocumentExporter, or use ExportDocumentAttribute to generate document exports, before symbol exports can be generated",
+        messageFormat: "Type '{0}' must implement IDocumentExporter, or use ExportDocumentAttribute or CommandAttribute to generate document exports, before symbol exports can be generated",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -111,6 +117,30 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidValidatorTargetDiagnostic = new(
+        id: "KCLG109",
+        title: "ValidatorAttribute requires ArgumentAttribute or PropertyAttribute",
+        messageFormat: "Member '{0}' uses ValidatorAttribute but is not annotated with ArgumentAttribute or PropertyAttribute",
+        category: "Kawayi.CommandLine.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor InvalidValidatorMethodDiagnostic = new(
+        id: "KCLG110",
+        title: "Validator method must be a matching static method",
+        messageFormat: "Validator '{0}' for member '{1}' must resolve to exactly one static non-generic method returning string? and accepting '{2}'",
+        category: "Kawayi.CommandLine.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor NonNullableSubcommandDiagnostic = new(
+        id: "KCLG111",
+        title: "Subcommand property should be nullable",
+        messageFormat: "Subcommand member '{0}' should be nullable because binding assigns null when the subcommand is not selected",
+        category: "Kawayi.CommandLine.Generator",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private static readonly SymbolDisplayFormat FullyQualifiedTypeFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
@@ -122,18 +152,26 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var targets = context.SyntaxProvider.ForAttributeWithMetadataName(
-                fullyQualifiedMetadataName: ExportSymbolsAttributeMetadataName,
-                predicate: static (node, _) => node is TypeDeclarationSyntax,
-                transform: static (attributeContext, cancellationToken) => CreateTarget(attributeContext, cancellationToken))
-            .Where(static target => target is not null);
+        var targets = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
+                transform: static (syntaxContext, cancellationToken) => CreateTarget(syntaxContext, cancellationToken))
+            .Where(static target => target is not null)
+            .Collect()
+            .SelectMany(static (targets, _) => DistinctTargets(targets));
 
         context.RegisterSourceOutput(targets, static (productionContext, target) => Emit(productionContext, target!));
     }
 
-    private static ExportTarget? CreateTarget(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+    private static ExportTarget? CreateTarget(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
-        if (context.TargetSymbol is not INamedTypeSymbol typeSymbol)
+        if (context.Node is not TypeDeclarationSyntax declaration ||
+            context.SemanticModel.GetDeclaredSymbol(declaration, cancellationToken) is not INamedTypeSymbol typeSymbol)
+        {
+            return null;
+        }
+
+        if (!HasAttribute(typeSymbol, ExportSymbolsAttributeMetadataName) &&
+            !HasAttribute(typeSymbol, CommandAttributeMetadataName))
         {
             return null;
         }
@@ -142,7 +180,8 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         var missingPartialSymbol = FindFirstMissingPartialType(typeSymbol);
         var hasDocumentExporter =
             typeSymbol.AllInterfaces.Any(static item => item.ToDisplayString() == DocumentExporterMetadataName) ||
-            HasAttribute(typeSymbol, ExportDocumentAttributeMetadataName);
+            HasAttribute(typeSymbol, ExportDocumentAttributeMetadataName) ||
+            HasAttribute(typeSymbol, CommandAttributeMetadataName);
 
         var exports = ImmutableArray.CreateBuilder<MemberExport>();
         var argumentPositions = new Dictionary<int, MemberExport>();
@@ -163,6 +202,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
             var longAliasAttributes = GetAttributes(propertySymbol, LongAliasAttributeMetadataName);
             var shortAliasAttributes = GetAttributes(propertySymbol, ShortAliasAttributeMetadataName);
             var subcommandAliasAttributes = GetAttributes(propertySymbol, AliasAttributeMetadataName);
+            var validatorAttributes = GetAttributes(propertySymbol, ValidatorAttributeMetadataName);
             var roleCount = (roleAttribute.Argument is null ? 0 : 1)
                             + (roleAttribute.Property is null ? 0 : 1)
                             + (roleAttribute.Subcommand is null ? 0 : 1);
@@ -170,6 +210,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
             if (roleCount == 0)
             {
                 ReportInvalidAliasesIfNeeded(diagnostics, propertySymbol, longAliasAttributes, shortAliasAttributes, subcommandAliasAttributes);
+                ReportInvalidValidatorTargetIfNeeded(diagnostics, propertySymbol, validatorAttributes);
                 continue;
             }
 
@@ -206,6 +247,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                 var export = CreateArgumentExport(propertySymbol,
                                                  roleAttribute.Argument,
                                                  valueRangeAttribute,
+                                                 ResolveValidators(typeSymbol, propertySymbol, validatorAttributes, diagnostics),
                                                  declarationOrder++);
                 exports.Add(export);
 
@@ -237,11 +279,14 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                                                   valueRangeAttribute,
                                                   longAliasAttributes,
                                                   shortAliasAttributes,
+                                                  ResolveValidators(typeSymbol, propertySymbol, validatorAttributes, diagnostics),
                                                   declarationOrder++);
                 exports.Add(export);
                 RegisterConflicts(diagnostics, nameRegistry, export);
                 continue;
             }
+
+            ReportInvalidValidatorTargetIfNeeded(diagnostics, propertySymbol, validatorAttributes);
 
             if (!longAliasAttributes.IsDefaultOrEmpty || !shortAliasAttributes.IsDefaultOrEmpty)
             {
@@ -249,6 +294,8 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                                                    propertySymbol.Locations.FirstOrDefault(),
                                                    [propertySymbol.Name]));
             }
+
+            ReportNonNullableSubcommandIfNeeded(diagnostics, propertySymbol);
 
             var subcommandExport = CreateSubcommandExport(propertySymbol,
                                                          roleAttribute.Subcommand!,
@@ -287,6 +334,34 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         }
     }
 
+    private static void ReportInvalidValidatorTargetIfNeeded(
+        ImmutableArray<DiagnosticInfo>.Builder diagnostics,
+        IPropertySymbol propertySymbol,
+        ImmutableArray<AttributeData> validatorAttributes)
+    {
+        if (validatorAttributes.IsDefaultOrEmpty)
+        {
+            return;
+        }
+
+        diagnostics.Add(new DiagnosticInfo(InvalidValidatorTargetDiagnostic,
+                                           propertySymbol.Locations.FirstOrDefault(),
+                                           [propertySymbol.Name]));
+    }
+
+    private static void ReportNonNullableSubcommandIfNeeded(
+        ImmutableArray<DiagnosticInfo>.Builder diagnostics,
+        IPropertySymbol propertySymbol)
+    {
+        if (propertySymbol.Type.IsReferenceType &&
+            propertySymbol.Type.NullableAnnotation == NullableAnnotation.NotAnnotated)
+        {
+            diagnostics.Add(new DiagnosticInfo(NonNullableSubcommandDiagnostic,
+                                               propertySymbol.Locations.FirstOrDefault(),
+                                               [propertySymbol.Name]));
+        }
+    }
+
     private static void RegisterConflicts(
         ImmutableArray<DiagnosticInfo>.Builder diagnostics,
         Dictionary<string, MemberExport> nameRegistry,
@@ -306,10 +381,54 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         }
     }
 
+    private static ImmutableArray<ValidatorExport> ResolveValidators(
+        INamedTypeSymbol typeSymbol,
+        IPropertySymbol propertySymbol,
+        ImmutableArray<AttributeData> validatorAttributes,
+        ImmutableArray<DiagnosticInfo>.Builder diagnostics)
+    {
+        if (validatorAttributes.IsDefaultOrEmpty)
+        {
+            return [];
+        }
+
+        var validators = ImmutableArray.CreateBuilder<ValidatorExport>(validatorAttributes.Length);
+        foreach (var validatorAttribute in validatorAttributes)
+        {
+            var validatorName = GetAttributeString(validatorAttribute, 0, string.Empty);
+            var matches = typeSymbol.GetMembers(validatorName)
+                .OfType<IMethodSymbol>()
+                .Where(method => IsMatchingValidator(method, propertySymbol.Type))
+                .ToArray();
+
+            if (matches.Length != 1)
+            {
+                diagnostics.Add(new DiagnosticInfo(InvalidValidatorMethodDiagnostic,
+                                                   propertySymbol.Locations.FirstOrDefault(),
+                                                   [validatorName, propertySymbol.Name, propertySymbol.Type.ToDisplayString(FullyQualifiedTypeFormat)]));
+                continue;
+            }
+
+            validators.Add(new ValidatorExport(EscapeIdentifier(matches[0].Name)));
+        }
+
+        return validators.ToImmutable();
+    }
+
+    private static bool IsMatchingValidator(IMethodSymbol methodSymbol, ITypeSymbol valueType)
+    {
+        return methodSymbol.IsStatic &&
+               !methodSymbol.IsGenericMethod &&
+               methodSymbol.ReturnType.SpecialType == SpecialType.System_String &&
+               methodSymbol.Parameters.Length == 1 &&
+               SymbolEqualityComparer.Default.Equals(methodSymbol.Parameters[0].Type, valueType);
+    }
+
     private static MemberExport CreateArgumentExport(
         IPropertySymbol propertySymbol,
         AttributeData argumentAttribute,
         AttributeData valueRangeAttribute,
+        ImmutableArray<ValidatorExport> validators,
         int declarationOrder)
     {
         var position = GetAttributeInt(argumentAttribute, 0, 0);
@@ -331,7 +450,9 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                                 propertySymbol.Locations.FirstOrDefault(),
                                 declarationOrder,
                                 position,
-                                null);
+                                null,
+                                null,
+                                validators);
     }
 
     private static MemberExport CreatePropertyExport(
@@ -340,6 +461,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         AttributeData? valueRangeAttribute,
         ImmutableArray<AttributeData> longAliasAttributes,
         ImmutableArray<AttributeData> shortAliasAttributes,
+        ImmutableArray<ValidatorExport> validators,
         int declarationOrder)
     {
         var requirement = GetAttributeBool(propertyAttribute, 0, false);
@@ -349,6 +471,9 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         var maximum = valueRangeAttribute is null ? default(int?) : GetAttributeInt(valueRangeAttribute, 1, 0);
         var longAliases = CreateAliasEntries(longAliasAttributes);
         var shortAliases = CreateAliasEntries(shortAliasAttributes);
+        var enumPossibleValuesExpression = propertySymbol.Type.TypeKind == TypeKind.Enum
+            ? $"new global::Kawayi.CommandLine.Abstractions.CountablePossibleValues<string>(global::System.Collections.Immutable.ImmutableArray.CreateRange<string>(global::System.Enum.GetNames(typeof({propertySymbol.Type.ToDisplayString(FullyQualifiedTypeFormat)}))))"
+            : null;
         var conflictKeys = longAliases.Select(static alias => alias.Name)
             .Concat(shortAliases.Select(static alias => alias.Name))
             .ToImmutableArray();
@@ -366,7 +491,9 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                                 propertySymbol.Locations.FirstOrDefault(),
                                 declarationOrder,
                                 null,
-                                conflictKeys);
+                                conflictKeys,
+                                enumPossibleValuesExpression,
+                                validators);
     }
 
     private static MemberExport CreateSubcommandExport(
@@ -474,6 +601,14 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         return attribute.ConstructorArguments[index].Value as string;
     }
 
+    private static string EscapeIdentifier(string identifier)
+    {
+        return SyntaxFacts.GetKeywordKind(identifier) == SyntaxKind.None &&
+               SyntaxFacts.GetContextualKeywordKind(identifier) == SyntaxKind.None
+            ? identifier
+            : "@" + identifier;
+    }
+
     private static INamedTypeSymbol? FindFirstMissingPartialType(INamedTypeSymbol typeSymbol)
     {
         for (var current = typeSymbol; current is not null; current = current.ContainingType)
@@ -528,7 +663,11 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                 context.ReportDiagnostic(Diagnostic.Create(diagnostic.Descriptor, diagnostic.Location, diagnostic.Args));
             }
 
-            return;
+            if (target.Diagnostics.Any(static diagnostic =>
+                    diagnostic.Descriptor.DefaultSeverity == DiagnosticSeverity.Error))
+            {
+                return;
+            }
         }
 
         context.AddSource(GetHintName(target.TypeSymbol), SourceText.From(GenerateSource(target), Encoding.UTF8));
@@ -626,8 +765,12 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
 
     private static string GenerateArgumentExpression(MemberExport member)
     {
-        return
+        var argumentExpression =
             $"new global::Kawayi.CommandLine.Abstractions.ArgumentDefinition({GenerateDefinitionInformationExpression(member)}, null, new global::Kawayi.CommandLine.Abstractions.ValueRange({member.ValueRangeMinimum}, {member.ValueRangeMaximum}), typeof({member.TypeName}), {FormatBool(member.VisibleRequirement)})";
+        var initializers = new List<string>(1);
+        AddValidationInitializer(initializers, member);
+
+        return ApplyInitializers(argumentExpression, initializers);
     }
 
     private static string GeneratePropertyExpression(MemberExport member)
@@ -646,12 +789,59 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
             initializers.Add($"NumArgs = new global::Kawayi.CommandLine.Abstractions.ValueRange({member.ValueRangeMinimum}, {member.ValueRangeMaximum})");
         }
 
-        if (initializers.Count == 0)
+        if (member.PossibleValuesExpression is not null)
         {
-            return propertyExpression;
+            initializers.Add($"PossibleValues = {member.PossibleValuesExpression}");
         }
 
-        return $"{propertyExpression} {{ {string.Join(", ", initializers)} }}";
+        AddValidationInitializer(initializers, member);
+
+        return ApplyInitializers(propertyExpression, initializers);
+    }
+
+    private static void AddValidationInitializer(List<string> initializers, MemberExport member)
+    {
+        if (member.Validators.IsDefaultOrEmpty)
+        {
+            return;
+        }
+
+        initializers.Add($"Validation = {GenerateValidationExpression(member)}");
+    }
+
+    private static string ApplyInitializers(string expression, List<string> initializers)
+    {
+        return initializers.Count == 0
+            ? expression
+            : $"{expression} {{ {string.Join(", ", initializers)} }}";
+    }
+
+    private static string GenerateValidationExpression(MemberExport member)
+    {
+        if (member.Validators.Length == 1)
+        {
+            return $"static value => {member.Validators[0].MethodName}(({member.TypeName})value)";
+        }
+
+        var builder = new StringBuilder();
+        builder.Append("static value => { ");
+        for (var i = 0; i < member.Validators.Length; i++)
+        {
+            builder.Append("var result")
+                .Append(i)
+                .Append(" = ")
+                .Append(member.Validators[i].MethodName)
+                .Append("((")
+                .Append(member.TypeName)
+                .Append(")value); if (result")
+                .Append(i)
+                .Append(" is not null) { return result")
+                .Append(i)
+                .Append("; } ");
+        }
+
+        builder.Append("return null; }");
+        return builder.ToString();
     }
 
     private static string GenerateSubcommandExpression(MemberExport member)
@@ -663,7 +853,12 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
     private static string GenerateDefinitionInformationExpression(MemberExport member)
     {
         return
-            $"new global::Kawayi.CommandLine.Abstractions.DefinitionInformation(new global::Kawayi.CommandLine.Abstractions.NameWithVisibility({SymbolDisplay.FormatLiteral(member.MemberName, true)}, {FormatBool(member.Visible)}), Documents[{SymbolDisplay.FormatLiteral(member.MemberName, true)}])";
+            $"new global::Kawayi.CommandLine.Abstractions.DefinitionInformation(new global::Kawayi.CommandLine.Abstractions.NameWithVisibility({GenerateCommandLineNameExpression(member.MemberName)}, {FormatBool(member.Visible)}), Documents[{SymbolDisplay.FormatLiteral(member.MemberName, true)}])";
+    }
+
+    private static string GenerateCommandLineNameExpression(string memberName)
+    {
+        return $"global::Kawayi.CommandLine.Abstractions.CaseConverter.Pascal2Kebab({SymbolDisplay.FormatLiteral(memberName, true)})";
     }
 
     private static string GenerateAliasDictionaryExpression(ImmutableArray<AliasEntry> aliases)
@@ -828,6 +1023,28 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         return $"{sanitizedName}.ExportSymbols.g.cs";
     }
 
+    private static ImmutableArray<ExportTarget> DistinctTargets(ImmutableArray<ExportTarget?> targets)
+    {
+        var builder = ImmutableArray.CreateBuilder<ExportTarget>(targets.Length);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var target in targets)
+        {
+            if (target is null)
+            {
+                continue;
+            }
+
+            var key = target.TypeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+            if (seen.Add(key))
+            {
+                builder.Add(target);
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
     private sealed class ExportTarget
     {
         public ExportTarget(
@@ -886,7 +1103,9 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                             Location? location,
                             int declarationOrder,
                             int? argumentPosition = null,
-                            ImmutableArray<string>? conflictKeys = null)
+                            ImmutableArray<string>? conflictKeys = null,
+                            string? possibleValuesExpression = null,
+                            ImmutableArray<ValidatorExport>? validators = null)
         {
             Kind = kind;
             MemberName = memberName;
@@ -902,6 +1121,8 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
             DeclarationOrder = declarationOrder;
             ArgumentPosition = argumentPosition;
             ConflictKeys = conflictKeys ?? [];
+            PossibleValuesExpression = possibleValuesExpression;
+            Validators = validators ?? [];
         }
 
         public MemberKind Kind { get; }
@@ -931,6 +1152,20 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         public int? ArgumentPosition { get; }
 
         public ImmutableArray<string> ConflictKeys { get; }
+
+        public string? PossibleValuesExpression { get; }
+
+        public ImmutableArray<ValidatorExport> Validators { get; }
+    }
+
+    private sealed class ValidatorExport
+    {
+        public ValidatorExport(string methodName)
+        {
+            MethodName = methodName;
+        }
+
+        public string MethodName { get; }
     }
 
     private sealed class AliasEntry

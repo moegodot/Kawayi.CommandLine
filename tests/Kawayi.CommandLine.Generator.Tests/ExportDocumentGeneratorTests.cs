@@ -6,9 +6,9 @@ using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core.Attributes;
 using Kawayi.CommandLine.Generator;
-using CommandDocument = Kawayi.CommandLine.Abstractions.Document;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using CommandDocument = Kawayi.CommandLine.Abstractions.Document;
 
 namespace Kawayi.CommandLine.Generator.Tests;
 
@@ -48,6 +48,34 @@ public class ExportDocumentGeneratorTests
         await Assert.That(result.Documents).IsNotNull();
         await Assert.That(result.Documents!["Property"]).EqualTo(new CommandDocument("Property summary", "Property remarks"));
         await Assert.That(result.Documents["Field"]).EqualTo(new CommandDocument("Field summary", "Field remarks"));
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IDocumentExporter")).IsTrue();
+    }
+
+    [Test]
+    public async Task CommandAttribute_Generates_DocumentExporter()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Property summary
+                /// </summary>
+                /// <remarks>
+                /// Property remarks
+                /// </remarks>
+                public string Property { get; set; } = string.Empty;
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+
+        await Assert.That(result.Documents).IsNotNull();
+        await Assert.That(result.Documents!["Property"]).EqualTo(new CommandDocument("Property summary", "Property remarks"));
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IDocumentExporter")).IsTrue();
     }
 

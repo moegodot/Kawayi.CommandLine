@@ -342,7 +342,6 @@ public class Containers
 
     private static ParsingResult ParseValue(ParsingOptions options,
                                             string rawValue,
-                                            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
                                             Type targetType)
     {
         if (targetType == typeof(string))
@@ -360,7 +359,7 @@ public class Containers
 
         if (targetType.IsEnum)
         {
-            return EnumParser.CreateParsing(options, arguments, targetType, TypeDefaultValues.GetValue(targetType)!);
+            return EnumParser.CreateParsing(options, arguments, targetType, Enum.ToObject(targetType, 0));
         }
 
         if (targetType == typeof(bool))
@@ -535,8 +534,8 @@ public class Containers
     [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum container construction uses runtime generic instantiation for enum element types.")]
     [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum container construction uses runtime generic instantiation for enum element types.")]
     private static ParsingResult BuildSequenceContainerForRuntimeType(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type genericDefinition,
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type valueType,
+        Type genericDefinition,
+        Type valueType,
         object?[] parsedValues)
     {
         try
@@ -679,9 +678,9 @@ public class Containers
     [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum dictionary construction uses runtime generic instantiation for enum key types.")]
     [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum dictionary construction uses runtime generic instantiation for enum key types.")]
     private static ParsingResult BuildDictionaryContainerForRuntimeKeyType(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type genericDefinition,
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type keyType,
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type valueType,
+        Type genericDefinition,
+        Type keyType,
+        Type valueType,
         ParsedDictionaryEntry[] entries)
     {
         try
@@ -699,8 +698,8 @@ public class Containers
     [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum dictionary construction uses runtime generic instantiation for enum value types.")]
     [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum dictionary construction uses runtime generic instantiation for enum value types.")]
     private static ParsingResult BuildDictionaryContainerForRuntimeValueType<TKey>(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type genericDefinition,
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type valueType,
+        Type genericDefinition,
+        Type valueType,
         ParsedDictionaryEntry[] entries)
         where TKey : notnull
     {

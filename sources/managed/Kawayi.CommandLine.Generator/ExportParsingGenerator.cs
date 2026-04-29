@@ -12,11 +12,14 @@ namespace Kawayi.CommandLine.Generator;
 
 /// <summary>
 /// Generates <c>IParsingExporter</c> and <c>IParsable&lt;T&gt;</c> implementations for
-/// types annotated with <c>CommandAttribute</c>.
+/// types annotated with <c>ExportParsingAttribute</c> or <c>CommandAttribute</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed partial class ExportParsingGenerator : IIncrementalGenerator
 {
+    private const string ExportParsingAttributeMetadataName =
+        "Kawayi.CommandLine.Core.Attributes.ExportParsingAttribute";
+
     private const string CommandAttributeMetadataName =
         "Kawayi.CommandLine.Core.Attributes.CommandAttribute";
 
@@ -32,15 +35,12 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
     private const string ParsableMetadataName =
         "Kawayi.CommandLine.Abstractions.IParsable";
 
-    private const string PropertyAttributeMetadataName =
-        "Kawayi.CommandLine.Core.Attributes.PropertyAttribute";
-
     private const string SubcommandAttributeMetadataName =
         "Kawayi.CommandLine.Core.Attributes.SubcommandAttribute";
 
     private static readonly DiagnosticDescriptor NonPartialDiagnostic = new(
         id: "KCLG201",
-        title: "Command target must be partial",
+        title: "ExportParsing target must be partial",
         messageFormat: "Type '{0}' must be declared partial to generate parsing exports",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
@@ -48,8 +48,8 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
 
     private static readonly DiagnosticDescriptor MissingSymbolExporterDiagnostic = new(
         id: "KCLG202",
-        title: "Command target must provide symbols",
-        messageFormat: "Type '{0}' must implement ISymbolExporter, or use ExportSymbolsAttribute to generate symbol exports, before parsing exports can be generated",
+        title: "ExportParsing target must provide symbols",
+        messageFormat: "Type '{0}' must implement ISymbolExporter, or use ExportSymbolsAttribute or CommandAttribute to generate symbol exports, before parsing exports can be generated",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -57,7 +57,7 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor InvalidSubcommandExporterDiagnostic = new(
         id: "KCLG203",
         title: "Subcommand type must provide parsing exports",
-        messageFormat: "Subcommand member '{0}' must target a type that implements IParsingExporter or is annotated with CommandAttribute",
+        messageFormat: "Subcommand member '{0}' must target a type that implements IParsingExporter or is annotated with ExportParsingAttribute or CommandAttribute",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -71,15 +71,24 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
         SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
+    private static readonly SymbolDisplayFormat FullyQualifiedNonNullableTypeFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions:
+        SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
+        SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var targets = context.SyntaxProvider.ForAttributeWithMetadataName(
-                fullyQualifiedMetadataName: CommandAttributeMetadataName,
-                predicate: static (node, _) => node is TypeDeclarationSyntax,
-                transform: static (attributeContext, cancellationToken) =>
-                    CreateTarget(attributeContext, cancellationToken))
-            .Where(static target => target is not null);
+        var targets = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
+                transform: static (syntaxContext, cancellationToken) =>
+                    CreateTarget(syntaxContext, cancellationToken))
+            .Where(static target => target is not null)
+            .Collect()
+            .SelectMany(static (targets, _) => DistinctTargets(targets));
 
         context.RegisterSourceOutput(targets, static (productionContext, target) =>
         {
@@ -88,10 +97,17 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
     }
 
     private static ExportTarget? CreateTarget(
-        GeneratorAttributeSyntaxContext context,
+        GeneratorSyntaxContext context,
         CancellationToken cancellationToken)
     {
-        if (context.TargetSymbol is not INamedTypeSymbol typeSymbol)
+        if (context.Node is not TypeDeclarationSyntax declaration ||
+            context.SemanticModel.GetDeclaredSymbol(declaration, cancellationToken) is not INamedTypeSymbol typeSymbol)
+        {
+            return null;
+        }
+
+        if (!HasAttribute(typeSymbol, ExportParsingAttributeMetadataName) &&
+            !HasAttribute(typeSymbol, CommandAttributeMetadataName))
         {
             return null;
         }
@@ -100,10 +116,10 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         var missingPartialSymbol = FindFirstMissingPartialType(typeSymbol);
         var hasSymbolExporter =
             typeSymbol.AllInterfaces.Any(static item => item.ToDisplayString() == SymbolExporterMetadataName) ||
-            HasAttribute(typeSymbol, ExportSymbolsAttributeMetadataName);
+            HasAttribute(typeSymbol, ExportSymbolsAttributeMetadataName) ||
+            HasAttribute(typeSymbol, CommandAttributeMetadataName);
 
         var subcommands = ImmutableArray.CreateBuilder<SubcommandBinding>();
-        var enumProperties = ImmutableArray.CreateBuilder<EnumPropertyBinding>();
 
         foreach (var propertySymbol in typeSymbol.GetMembers().OfType<IPropertySymbol>())
         {
@@ -112,14 +128,6 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
             if (propertySymbol.IsImplicitlyDeclared || propertySymbol.IsStatic || propertySymbol.IsIndexer)
             {
                 continue;
-            }
-
-            if (GetAttribute(propertySymbol, PropertyAttributeMetadataName) is not null &&
-                propertySymbol.Type.TypeKind == TypeKind.Enum)
-            {
-                enumProperties.Add(new EnumPropertyBinding(
-                    propertySymbol.Name,
-                    propertySymbol.Type.ToDisplayString(FullyQualifiedTypeFormat)));
             }
 
             if (GetAttribute(propertySymbol, SubcommandAttributeMetadataName) is null)
@@ -136,13 +144,12 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
             }
 
             subcommands.Add(new SubcommandBinding(propertySymbol.Name,
-                                                  propertySymbol.Type.ToDisplayString(FullyQualifiedTypeFormat)));
+                                                  propertySymbol.Type.ToDisplayString(FullyQualifiedNonNullableTypeFormat)));
         }
 
         return new ExportTarget(typeSymbol,
                                 missingPartialSymbol,
                                 hasSymbolExporter,
-                                enumProperties.ToImmutable(),
                                 subcommands.ToImmutable(),
                                 diagnostics.ToImmutable());
     }
@@ -155,6 +162,7 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         }
 
         return namedType.AllInterfaces.Any(static item => item.ToDisplayString() == ParsingExporterMetadataName) ||
+               HasAttribute(namedType, ExportParsingAttributeMetadataName) ||
                HasAttribute(namedType, CommandAttributeMetadataName);
     }
 
@@ -263,37 +271,13 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         AppendIndentedLine(builder, indentLevel + 2, "}");
         AppendIndentedLine(builder, indentLevel + 1, "}");
 
-        for (var i = 0; i < target.EnumProperties.Length; i++)
-        {
-            var enumProperty = target.EnumProperties[i];
-            var propertyNameLiteral = SymbolDisplay.FormatLiteral(enumProperty.PropertyName, true);
-            var propertyVariableName = $"enumProperty{i}";
-
-            AppendIndentedLine(
-                builder,
-                indentLevel + 1,
-                $"if (builder.Properties.TryGetValue({propertyNameLiteral}, out var {propertyVariableName}) && {propertyVariableName}.PossibleValues is null)");
-            AppendIndentedLine(builder, indentLevel + 1, "{");
-            AppendIndentedLine(
-                builder,
-                indentLevel + 2,
-                $"builder.Properties[{propertyNameLiteral}] = {propertyVariableName} with");
-            AppendIndentedLine(builder, indentLevel + 2, "{");
-            AppendIndentedLine(
-                builder,
-                indentLevel + 3,
-                $"PossibleValues = new global::Kawayi.CommandLine.Abstractions.CountablePossibleValues<string>(global::System.Collections.Immutable.ImmutableArray.CreateRange<string>(global::System.Enum.GetNames(typeof({enumProperty.TypeName}))))");
-            AppendIndentedLine(builder, indentLevel + 2, "};");
-            AppendIndentedLine(builder, indentLevel + 1, "}");
-        }
-
         foreach (var subcommand in target.Subcommands)
         {
-            var propertyNameLiteral = SymbolDisplay.FormatLiteral(subcommand.PropertyName, true);
+            var propertyNameExpression = GenerateCommandLineNameExpression(subcommand.PropertyName);
             AppendIndentedLine(
                 builder,
                 indentLevel + 1,
-                $"builder.Subcommands[GetRequiredSubcommandKey(builder, {propertyNameLiteral})] = {subcommand.TypeName}.ExportParsing(parsingOptions);");
+                $"builder.Subcommands[GetRequiredSubcommandKey(builder, {propertyNameExpression})] = {subcommand.TypeName}.ExportParsing(parsingOptions);");
         }
 
         AppendIndentedLine(builder, indentLevel + 1, "return builder;");
@@ -322,19 +306,19 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         AppendIndentedLine(
             builder,
             indentLevel,
-            "private static string GetRequiredSubcommandKey(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, string propertyName)");
+            "private static string GetRequiredSubcommandKey(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, string commandName)");
         AppendIndentedLine(builder, indentLevel, "{");
         AppendIndentedLine(
             builder,
             indentLevel + 1,
-            "if (builder.SubcommandDefinitions.TryGetValue(propertyName, out var definition) && definition is not null)");
+            "if (builder.SubcommandDefinitions.TryGetValue(commandName, out var definition) && definition is not null)");
         AppendIndentedLine(builder, indentLevel + 1, "{");
         AppendIndentedLine(builder, indentLevel + 2, "return definition.Information.Name.Value;");
         AppendIndentedLine(builder, indentLevel + 1, "}");
         AppendIndentedLine(
             builder,
             indentLevel + 1,
-            $"throw new global::System.InvalidOperationException(\"Expected Symbols for \" + {typeNameLiteral} + \" to contain a CommandDefinition named '\" + propertyName + \"' so the generated parsing exporter can attach the child parser.\");");
+            $"throw new global::System.InvalidOperationException(\"Expected Symbols for \" + {typeNameLiteral} + \" to contain a CommandDefinition named '\" + commandName + \"' so the generated parsing exporter can attach the child parser.\");");
         AppendIndentedLine(builder, indentLevel, "}");
     }
 
@@ -454,6 +438,11 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         return $"{typeSymbol.Name}<{string.Join(", ", typeSymbol.TypeParameters.Select(static parameter => parameter.Name))}>";
     }
 
+    private static string GenerateCommandLineNameExpression(string memberName)
+    {
+        return $"global::Kawayi.CommandLine.Abstractions.CaseConverter.Pascal2Kebab({SymbolDisplay.FormatLiteral(memberName, true)})";
+    }
+
     private static string BuildConstraintClause(ITypeParameterSymbol typeParameter)
     {
         var constraints = new List<string>();
@@ -553,20 +542,40 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         return $"{sanitizedName}.ExportParsing.g.cs";
     }
 
+    private static ImmutableArray<ExportTarget> DistinctTargets(ImmutableArray<ExportTarget?> targets)
+    {
+        var builder = ImmutableArray.CreateBuilder<ExportTarget>(targets.Length);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var target in targets)
+        {
+            if (target is null)
+            {
+                continue;
+            }
+
+            var key = target.TypeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+            if (seen.Add(key))
+            {
+                builder.Add(target);
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
     private sealed class ExportTarget
     {
         public ExportTarget(
             INamedTypeSymbol typeSymbol,
             INamedTypeSymbol? missingPartialSymbol,
             bool hasSymbolExporter,
-            ImmutableArray<EnumPropertyBinding> enumProperties,
             ImmutableArray<SubcommandBinding> subcommands,
             ImmutableArray<DiagnosticInfo> diagnostics)
         {
             TypeSymbol = typeSymbol;
             MissingPartialSymbol = missingPartialSymbol;
             HasSymbolExporter = hasSymbolExporter;
-            EnumProperties = enumProperties;
             Subcommands = subcommands;
             Diagnostics = diagnostics;
         }
@@ -577,24 +586,9 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
 
         public bool HasSymbolExporter { get; }
 
-        public ImmutableArray<EnumPropertyBinding> EnumProperties { get; }
-
         public ImmutableArray<SubcommandBinding> Subcommands { get; }
 
         public ImmutableArray<DiagnosticInfo> Diagnostics { get; }
-    }
-
-    private sealed class EnumPropertyBinding
-    {
-        public EnumPropertyBinding(string propertyName, string typeName)
-        {
-            PropertyName = propertyName;
-            TypeName = typeName;
-        }
-
-        public string PropertyName { get; }
-
-        public string TypeName { get; }
     }
 
     private sealed class SubcommandBinding

@@ -96,8 +96,13 @@ public sealed record ParsingOptions(
     }
 
     public ParsingOptions(ProgramInformation programInformation)
-    :this(programInformation, DefaultVersionFlags, DefaultHelpFlags, Console.Out, DefaultStyle, DefaultDebug, StyleTable.Default)
+    : this(programInformation, DefaultVersionFlags, DefaultHelpFlags, Console.Out, DefaultStyle, DefaultDebug, StyleTable.Default)
     {
+    }
+
+    public static ParsingOptions Create<T>(string simpleDescription, string helpText, string homePage)
+    {
+        return new(ProgramInformation.Create<T>(simpleDescription, helpText, homePage));
     }
 
     private static bool IsTruthyEnvironmentValue(string? value)

@@ -8,7 +8,7 @@ using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
-public sealed class FloatParser    : Abstractions.IParsable<float>,
+public sealed class FloatParser : Abstractions.IParsable<float>,
                                      Abstractions.IParsable<double>,
                                      Abstractions.IParsable<decimal>
 {

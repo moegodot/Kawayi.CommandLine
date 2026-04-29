@@ -3,6 +3,8 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --execution-mode background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format=json --env=region=cn --execution-mode=background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold -1
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch error --interval 5
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload hidden-profile extra-a extra-b --format xml --verbose true --retries 4 --tag alpha --tag beta --env region=cn --env tier=prod serve localhost --daemon false watch --interval 5 --once true --sink stdout changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch --interval 5 --sink -L/bin/foo.a
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json @sample-response.txt
@@ -225,7 +227,7 @@ internal static class Program
                 versionFlagsDetected.FlagAction();
                 return 0;
             case ParsingFinished<IParsingResultCollection> parsingFinished:
-                PrintSuccess(parsingFinished.Result, Console.Out);
+                PrintSuccess(parsingFinished.Result.Bind<WorkspaceCommand>(), Console.Out);
                 return 0;
             case InvalidArgumentDetected invalidArgumentDetected:
                 PrintError("Invalid argument", $"{invalidArgumentDetected.Argument}: expected {invalidArgumentDetected.Expect}", invalidArgumentDetected.Exception);
@@ -257,34 +259,50 @@ internal static class Program
         return current;
     }
 
-    private static void PrintSuccess(IParsingResultCollection leafScope, TextWriter output)
+    private static void PrintSuccess(WorkspaceCommand command, TextWriter output)
     {
         output.WriteLine("Parse succeeded.");
-        output.WriteLine($"Command path: {BuildCommandPath(leafScope)}");
+        output.WriteLine($"Command path: {BuildCommandPath(command)}");
         output.WriteLine();
+        PrintBoundCommand(command, output);
+    }
 
-        foreach (var scope in EnumerateScopeChain(leafScope))
+    private static void PrintBoundCommand(WorkspaceCommand command, TextWriter output)
+    {
+        output.WriteLine("Bound command model:");
+        output.WriteLine($"  Input: {DescribeValue(command.Input)}");
+        output.WriteLine($"  Profile: {DescribeValue(command.Profile)}");
+        output.WriteLine($"  Extras: {DescribeValue(command.Extras)}");
+        output.WriteLine($"  Format: {DescribeValue(command.Format)}");
+        output.WriteLine($"  Verbose: {DescribeValue(command.Verbose)}");
+        output.WriteLine($"  Retries: {DescribeValue(command.Retries)}");
+        output.WriteLine($"  ExecutionMode: {DescribeValue(command.ExecutionMode)}");
+        output.WriteLine($"  Threshold: {DescribeValue(command.Threshold)}");
+        output.WriteLine($"  RequestId: {DescribeValue(command.RequestId)}");
+        output.WriteLine($"  Endpoint: {DescribeValue(command.Endpoint)}");
+        output.WriteLine($"  StartDate: {DescribeValue(command.StartDate)}");
+        output.WriteLine($"  StartTime: {DescribeValue(command.StartTime)}");
+        output.WriteLine($"  Tags: {DescribeValue(command.Tags)}");
+        output.WriteLine($"  Env: {DescribeValue(command.Env)}");
+        output.WriteLine($"  SecretToken: {(command.SecretToken is null ? "null" : "(set)")}");
+        output.WriteLine($"  Serve: {DescribeSelected(command.Serve is not null)}");
+
+        if (command.Serve is null)
         {
-            output.WriteLine($"Scope: {GetScopeName(scope)}");
+            return;
+        }
 
-            foreach (var definition in scope.Scope.AvailableTypedDefinitions
-                         .OrderBy(static item => item.Information.Name.Value, StringComparer.Ordinal))
-            {
-                var explicitValue = scope.TryGetValue(definition, out var value)
-                    ? DescribeValue(value)
-                    : "(not set)";
-                var effectiveValue = DescribeValue(scope.GetEffectiveValueOrDefault(definition));
-                output.WriteLine($"  {definition.Information.Name.Value}");
-                output.WriteLine($"    explicit: {explicitValue}");
-                output.WriteLine($"    effective: {effectiveValue}");
-            }
+        output.WriteLine($"    Host: {DescribeValue(command.Serve.Host)}");
+        output.WriteLine($"    Port: {DescribeValue(command.Serve.Port)}");
+        output.WriteLine($"    Daemon: {DescribeValue(command.Serve.Daemon)}");
+        output.WriteLine($"    Watch: {DescribeSelected(command.Serve.Watch is not null)}");
 
-            if (scope.Scope.AvailableTypedDefinitions.IsDefaultOrEmpty)
-            {
-                output.WriteLine("  (no typed definitions in this scope)");
-            }
-
-            output.WriteLine();
+        if (command.Serve.Watch is not null)
+        {
+            output.WriteLine($"      Pattern: {DescribeValue(command.Serve.Watch.Pattern)}");
+            output.WriteLine($"      Interval: {DescribeValue(command.Serve.Watch.Interval)}");
+            output.WriteLine($"      Once: {DescribeValue(command.Serve.Watch.Once)}");
+            output.WriteLine($"      Sink: {DescribeValue(command.Serve.Watch.Sink)}");
         }
     }
 
@@ -299,42 +317,17 @@ internal static class Program
         }
     }
 
-    private static string BuildCommandPath(IParsingResultCollection scope)
+    private static string BuildCommandPath(WorkspaceCommand command)
     {
-        var segments = new Stack<string>();
-        var current = scope;
-
-        while (current is not null)
+        if (command.Serve?.Watch is not null)
         {
-            if (current.Command is not null)
-            {
-                segments.Push(current.Command.Information.Name.Value);
-            }
-
-            current = current.Parent;
+            return "serve -> watch";
         }
 
-        return segments.Count == 0 ? "<root>" : string.Join(" -> ", segments);
+        return command.Serve is not null ? "serve" : "<root>";
     }
 
-    private static IEnumerable<IParsingResultCollection> EnumerateScopeChain(IParsingResultCollection leafScope)
-    {
-        var scopes = new Stack<IParsingResultCollection>();
-        var current = leafScope;
-
-        while (current is not null)
-        {
-            scopes.Push(current);
-            current = current.Parent;
-        }
-
-        return scopes;
-    }
-
-    private static string GetScopeName(IParsingResultCollection scope)
-    {
-        return scope.Command?.Information.Name.Value ?? "<root>";
-    }
+    private static string DescribeSelected(bool selected) => selected ? "selected" : "not selected";
 
     private static string DescribeValue(object? value)
     {
@@ -402,8 +395,6 @@ internal static class Program
 /// <summary>
 /// Root command used by the attribute showcase.
 /// </summary>
-[ExportDocument]
-[ExportSymbols]
 [Command]
 public partial class WorkspaceCommand
 {
@@ -416,7 +407,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Argument(0, require: true)]
     [ValueRange(1, 1)]
-    public string input { get; set; } = string.Empty;
+    public string Input { get; set; } = string.Empty;
 
     /// <summary>
     /// Hidden profile selector
@@ -426,7 +417,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Argument(1, visible: false)]
     [ValueRange(0, 1)]
-    public string? profile { get; set; }
+    public string? Profile { get; set; }
 
     /// <summary>
     /// Additional trailing values
@@ -436,7 +427,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Argument(2)]
     [ValueRange(0, int.MaxValue)]
-    public ImmutableArray<string> extras { get; set; }
+    public ImmutableArray<string> Extras { get; set; }
 
     /// <summary>
     /// Enable verbose logging
@@ -447,7 +438,7 @@ public partial class WorkspaceCommand
     [Property]
     [LongAlias("verbose")]
     [ShortAlias("v")]
-    public bool verbose { get; set; }
+    public bool Verbose { get; set; }
 
     /// <summary>
     /// Choose the output format
@@ -461,7 +452,7 @@ public partial class WorkspaceCommand
     [LongAlias("format")]
     [LongAlias("output-format", visible: false)]
     [ShortAlias("f")]
-    public string format { get; set; } = string.Empty;
+    public string Format { get; set; } = string.Empty;
 
     /// <summary>
     /// Retry count
@@ -472,7 +463,7 @@ public partial class WorkspaceCommand
     [Property]
     [LongAlias("retries")]
     [ShortAlias("r")]
-    public int retries { get; set; }
+    public int Retries { get; set; }
 
     /// <summary>
     /// Execution mode
@@ -483,7 +474,7 @@ public partial class WorkspaceCommand
     [Property]
     [LongAlias("execution-mode")]
     [ShortAlias("m")]
-    public ExecutionMode executionMode { get; set; }
+    public ExecutionMode ExecutionMode { get; set; }
 
     /// <summary>
     /// Numeric threshold
@@ -493,7 +484,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Property]
     [LongAlias("threshold")]
-    public decimal threshold { get; set; }
+    public decimal Threshold { get; set; }
 
     /// <summary>
     /// Request identifier
@@ -503,7 +494,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Property]
     [LongAlias("request-id")]
-    public Guid requestId { get; set; }
+    public Guid RequestId { get; set; }
 
     /// <summary>
     /// Service endpoint
@@ -513,7 +504,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Property]
     [LongAlias("endpoint")]
-    public Uri endpoint { get; set; } = new("https://example.invalid");
+    public Uri Endpoint { get; set; } = new("https://example.invalid");
 
     /// <summary>
     /// Start date
@@ -523,7 +514,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Property]
     [LongAlias("start-date")]
-    public DateOnly startDate { get; set; }
+    public DateOnly StartDate { get; set; }
 
     /// <summary>
     /// Start time
@@ -533,7 +524,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Property]
     [LongAlias("start-time")]
-    public TimeOnly startTime { get; set; }
+    public TimeOnly StartTime { get; set; }
 
     /// <summary>
     /// Repeated tags
@@ -544,7 +535,7 @@ public partial class WorkspaceCommand
     [Property]
     [LongAlias("tag")]
     [ShortAlias("t", visible: false)]
-    public ImmutableArray<string> tags { get; set; }
+    public ImmutableArray<string> Tags { get; set; }
 
     /// <summary>
     /// Environment entries
@@ -555,7 +546,7 @@ public partial class WorkspaceCommand
     [Property(valueName: "key=value")]
     [LongAlias("env")]
     [ShortAlias("e")]
-    public ImmutableDictionary<string, string> env { get; set; } = ImmutableDictionary<string, string>.Empty;
+    public ImmutableDictionary<string, string> Env { get; set; } = ImmutableDictionary<string, string>.Empty;
 
     /// <summary>
     /// Hidden secret token
@@ -565,7 +556,7 @@ public partial class WorkspaceCommand
     /// </remarks>
     [Property(visible: false)]
     [LongAlias("secret-token", visible: false)]
-    public string? secretToken { get; set; }
+    public string? SecretToken { get; set; }
 
     /// <summary>
     /// Server operations
@@ -576,14 +567,12 @@ public partial class WorkspaceCommand
     [Subcommand]
     [Alias("srv")]
     [Alias("s", visible: false)]
-    public ServeCommand serve { get; } = new();
+    public ServeCommand? Serve { get; private set; }
 }
 
 /// <summary>
 /// First-level subcommand for server-oriented operations.
 /// </summary>
-[ExportDocument]
-[ExportSymbols]
 [Command]
 public partial class ServeCommand
 {
@@ -595,7 +584,7 @@ public partial class ServeCommand
     /// </remarks>
     [Argument(0, require: true)]
     [ValueRange(1, 1)]
-    public string host { get; set; } = "localhost";
+    public string Host { get; set; } = "localhost";
 
     /// <summary>
     /// Listener port
@@ -606,7 +595,7 @@ public partial class ServeCommand
     [Property]
     [LongAlias("port")]
     [ShortAlias("p")]
-    public int port { get; set; }
+    public int Port { get; set; }
 
     /// <summary>
     /// Run as a daemon
@@ -616,7 +605,7 @@ public partial class ServeCommand
     /// </remarks>
     [Property]
     [LongAlias("daemon")]
-    public bool daemon { get; set; }
+    public bool Daemon { get; set; }
 
     /// <summary>
     /// Watch mode
@@ -627,14 +616,12 @@ public partial class ServeCommand
     [Subcommand]
     [Alias("tail")]
     [Alias("wt", visible: false)]
-    public WatchCommand watch { get; } = new();
+    public WatchCommand? Watch { get; private set; }
 }
 
 /// <summary>
 /// Second-level subcommand for watch-style workflows.
 /// </summary>
-[ExportDocument]
-[ExportSymbols]
 [Command]
 public partial class WatchCommand
 {
@@ -642,11 +629,22 @@ public partial class WatchCommand
     /// Optional watch pattern
     /// </summary>
     /// <remarks>
-    /// Demonstrates an optional positional argument inside the second-level subcommand.
+    /// Demonstrates an optional positional argument with generated validator metadata inside the second-level subcommand.
     /// </remarks>
     [Argument(0)]
     [ValueRange(0, 1)]
-    public string? pattern { get; set; }
+    [Validator(nameof(ValidatePattern))]
+    public string? Pattern { get; set; }
+
+    /// <summary>
+    /// Validates the optional watch pattern.
+    /// </summary>
+    /// <param name="pattern">The parsed watch pattern.</param>
+    /// <returns>An error message when the pattern is rejected; otherwise, <see langword="null" />.</returns>
+    public static string? ValidatePattern(string? pattern)
+    {
+        return pattern is "error" ? "error" : null;
+    }
 
     /// <summary>
     /// Polling interval
@@ -657,7 +655,7 @@ public partial class WatchCommand
     [Property(require: true)]
     [LongAlias("interval")]
     [ShortAlias("i")]
-    public int interval { get; set; }
+    public int Interval { get; set; }
 
     /// <summary>
     /// Run once and exit
@@ -667,7 +665,7 @@ public partial class WatchCommand
     /// </remarks>
     [Property]
     [LongAlias("once")]
-    public bool once { get; set; }
+    public bool Once { get; set; }
 
     /// <summary>
     /// Output sink
@@ -678,5 +676,5 @@ public partial class WatchCommand
     [Property]
     [LongAlias("sink")]
     [ShortAlias("k")]
-    public string sink { get; set; } = "stdout";
+    public string Sink { get; set; } = "stdout";
 }

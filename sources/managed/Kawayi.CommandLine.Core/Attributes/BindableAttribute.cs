@@ -3,10 +3,7 @@
 
 namespace Kawayi.CommandLine.Core.Attributes;
 
-[AttributeUsage(AttributeTargets.Class, Inherited = true, AllowMultiple = false)]
-public sealed class CommandAttribute : Attribute
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class BindableAttribute : Attribute
 {
-    public CommandAttribute()
-    {
-    }
 }

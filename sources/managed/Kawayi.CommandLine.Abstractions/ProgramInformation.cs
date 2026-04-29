@@ -8,4 +8,11 @@ public record ProgramInformation(string Name,
                                  Version Version,
                                  string Homepage)
 {
+    public static ProgramInformation Create<T>(string simpleDescription, string helpText, string homePage)
+    {
+        var name = typeof(T).Assembly.FullName ?? typeof(T).FullName ?? typeof(T).Name;
+        var version = typeof(T).Assembly.GetName().Version ?? Version.Parse("1.0.0.0");
+        var document = new Document(simpleDescription, helpText);
+        return new(name, document, version, homePage);
+    }
 }

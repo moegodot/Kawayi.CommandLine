@@ -30,7 +30,7 @@ public sealed class StyledStringBuilder
         return this;
     }
 
-    public StyledStringBuilder Append(Style style,string text)
+    public StyledStringBuilder Append(Style style, string text)
     {
         if (!EnableStyle)
         {
@@ -45,7 +45,7 @@ public sealed class StyledStringBuilder
         return this;
     }
 
-    public StyledStringBuilder AppendLine(Style style,string text)
+    public StyledStringBuilder AppendLine(Style style, string text)
     {
         if (!EnableStyle)
         {

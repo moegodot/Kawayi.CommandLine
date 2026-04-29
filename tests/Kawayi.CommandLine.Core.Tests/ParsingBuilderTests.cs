@@ -177,7 +177,7 @@ public sealed class ParsingBuilderTests
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_Bare_Bool_Long_Option()
+    public async Task CreateParsing_Parses_Bare_Bool_Long_Option_As_True()
     {
         var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
         var builder = new ParsingBuilder(
@@ -185,18 +185,13 @@ public sealed class ParsingBuilderTests
             properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
 
         var result = Parse(builder, [new LongOptionToken("verbose")]);
+        var values = AssertFinishedCollection(result);
 
-        if (result is not InvalidArgumentDetected invalidArgument)
-        {
-            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
-        }
-
-        await Assert.That(invalidArgument.Argument).IsEqualTo("verbose");
-        await Assert.That(invalidArgument.Expect).IsEqualTo("System.Boolean");
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsTrue();
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_Bare_Bool_Short_Option()
+    public async Task CreateParsing_Parses_Bare_Bool_Short_Option_As_True()
     {
         var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
         var builder = new ParsingBuilder(
@@ -204,18 +199,13 @@ public sealed class ParsingBuilderTests
             properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
 
         var result = Parse(builder, [new ShortOptionToken("v")]);
+        var values = AssertFinishedCollection(result);
 
-        if (result is not InvalidArgumentDetected invalidArgument)
-        {
-            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
-        }
-
-        await Assert.That(invalidArgument.Argument).IsEqualTo("verbose");
-        await Assert.That(invalidArgument.Expect).IsEqualTo("System.Boolean");
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsTrue();
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_NonBoolean_Scalar_Option_Value()
+    public async Task CreateParsing_Returns_UnknownArgument_For_Bool_Option_Followed_By_NonBoolean_Without_Positional_Target()
     {
         var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
         var builder = new ParsingBuilder(
@@ -230,6 +220,24 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(builder, arguments);
 
+        if (result is not UnknownArgumentDetected unknownArgument)
+        {
+            throw new InvalidOperationException($"Expected {nameof(UnknownArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(unknownArgument.UnknownArgument).IsEqualTo("maybe");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_For_Bool_Inline_NonBoolean_Value()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        var result = Parse(builder, [new LongOptionToken("verbose", "maybe")]);
+
         if (result is not InvalidArgumentDetected invalidArgument)
         {
             throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
@@ -237,6 +245,79 @@ public sealed class ParsingBuilderTests
 
         await Assert.That(invalidArgument.Argument).IsEqualTo("maybe");
         await Assert.That(invalidArgument.Expect).IsEqualTo("bool");
+    }
+
+    [Test]
+    public async Task CreateParsing_Bool_Option_Leaves_NonBoolean_Next_Token_For_Positional_Binding()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var path = CreateArgument("path", typeof(string), 0, 1);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            argument: [path],
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("verbose"),
+            new ArgumentOrCommandToken("payload")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsTrue();
+        await Assert.That(GetEffectiveValue<string>(values, path)).IsEqualTo("payload");
+    }
+
+    [Test]
+    public async Task CreateParsing_Bool_Option_Leaves_NonBoolean_Next_Token_For_Subcommand_Matching()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var serve = CreateCommand("serve");
+        var childBuilder = new ParsingBuilder(DefaultOptions);
+        var rootBuilder = new ParsingBuilder(
+            DefaultOptions,
+            subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose),
+            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("verbose"),
+            new ArgumentOrCommandToken("serve")
+        ];
+
+        var result = Parse(rootBuilder, arguments);
+        var subcommand = AssertSubcommand(result, serve);
+        var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
+
+        await Assert.That(GetEffectiveValue<bool>(parentValues, verbose)).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateParsing_Bool_Option_Leaves_NonBoolean_Next_Token_For_Option_Parsing()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var count = CreateProperty("count", typeof(int));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty
+                .Add("verbose", verbose)
+                .Add("count", count));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("verbose"),
+            new LongOptionToken("count"),
+            new ArgumentOrCommandToken("3")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsTrue();
+        await Assert.That(GetEffectiveValue<int>(values, count)).IsEqualTo(3);
     }
 
     [Test]
@@ -1102,7 +1183,7 @@ public sealed class ParsingBuilderTests
     }
 
     [Test]
-    public async Task CreateParsing_Help_Auto_Includes_Enum_Possible_Values_For_Options()
+    public async Task CreateParsing_Help_Does_Not_Auto_Include_Enum_Possible_Values_For_Manual_Options()
     {
         var writer = new StringWriter();
         var options = CreateOptions(writer, enableStyle: false);
@@ -1123,8 +1204,8 @@ public sealed class ParsingBuilderTests
         var output = writer.ToString();
 
         await Assert.That(output).Contains("--mode <SampleMode>");
-        await Assert.That(output).Contains("Possible values:");
-        await Assert.That(output).Contains("Basic, Advanced");
+        await Assert.That(output.Contains("Possible values:", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(output.Contains("Basic, Advanced", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]
@@ -1228,7 +1309,7 @@ public sealed class ParsingBuilderTests
     }
 
     [Test]
-    public async Task CreateParsing_Help_Auto_Includes_Enum_Possible_Values_For_Arguments()
+    public async Task CreateParsing_Help_Does_Not_Auto_Include_Enum_Possible_Values_For_Arguments()
     {
         var writer = new StringWriter();
         var options = CreateOptions(writer, enableStyle: false);
@@ -1248,8 +1329,8 @@ public sealed class ParsingBuilderTests
 
         await Assert.That(output).Contains("Arguments");
         await Assert.That(output).Contains("mode");
-        await Assert.That(output).Contains("Possible values:");
-        await Assert.That(output).Contains("Basic, Advanced");
+        await Assert.That(output.Contains("Possible values:", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(output.Contains("Basic, Advanced", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]

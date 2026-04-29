@@ -14,7 +14,7 @@ public readonly record struct Color(byte R, byte G, byte B, byte A)
     public static Color Rose { get; } = new(244, 63, 94, 255);
 }
 
-public record Style(Color Foreground,Color Background, bool Bold, bool Underline, bool Italic)
+public record Style(Color Foreground, Color Background, bool Bold, bool Underline, bool Italic)
 {
     public static string ClearStyle { get; } = "\u001b[0m";
 

@@ -8,9 +8,9 @@ using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
 using Kawayi.CommandLine.Core.Attributes;
 using Kawayi.CommandLine.Generator;
-using CommandDocument = Kawayi.CommandLine.Abstractions.Document;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using CommandDocument = Kawayi.CommandLine.Abstractions.Document;
 
 namespace Kawayi.CommandLine.Generator.Tests;
 
@@ -26,17 +26,19 @@ public class ExportParsingGeneratorTests
 
             [ExportDocument]
             [ExportSymbols]
-            [Command]
+            [ExportParsing]
+
             public partial class ChildCommand
             {
                 [Property]
                 [LongAlias("force")]
-                public bool Force { get; set; }
+                public bool ForceOption { get; set; }
             }
 
             [ExportDocument]
             [ExportSymbols]
-            [Command]
+            [ExportParsing]
+
             public partial class Command
             {
                 [Argument(0)]
@@ -45,10 +47,10 @@ public class ExportParsingGeneratorTests
 
                 [Property]
                 [LongAlias("verbose")]
-                public bool Verbose { get; set; }
+                public bool VerboseOption { get; set; }
 
                 [Subcommand]
-                public ChildCommand Serve { get; } = new();
+                public ChildCommand ServeCommand { get; } = new();
             }
             """;
 
@@ -61,11 +63,11 @@ public class ExportParsingGeneratorTests
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
-        await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("Input");
-        await Assert.That(snapshot.Properties.ContainsKey("Verbose")).IsTrue();
-        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("Serve")).IsTrue();
+        await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
+        await Assert.That(snapshot.Properties.ContainsKey("verbose-option")).IsTrue();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("serve-command")).IsTrue();
         await Assert.That(snapshot.Subcommands.ContainsKey(exportedSubcommand.Information.Name.Value)).IsTrue();
-        await Assert.That(snapshot.Subcommands[exportedSubcommand.Information.Name.Value].Properties.ContainsKey("Force")).IsTrue();
+        await Assert.That(snapshot.Subcommands[exportedSubcommand.Information.Name.Value].Properties.ContainsKey("force-option")).IsTrue();
     }
 
     [Test]
@@ -78,17 +80,19 @@ public class ExportParsingGeneratorTests
 
             [ExportDocument]
             [ExportSymbols]
-            [Command]
+            [ExportParsing]
+
             public partial class ChildCommand
             {
                 [Property]
                 [LongAlias("force")]
-                public bool Force { get; set; }
+                public bool ForceOption { get; set; }
             }
 
             [ExportDocument]
             [ExportSymbols]
-            [Command]
+            [ExportParsing]
+
             public partial class Command
             {
                 [Argument(0)]
@@ -96,7 +100,7 @@ public class ExportParsingGeneratorTests
                 public string Input { get; set; } = string.Empty;
 
                 [Subcommand]
-                public ChildCommand Serve { get; } = new();
+                public ChildCommand ServeCommand { get; } = new();
             }
             """;
 
@@ -104,79 +108,71 @@ public class ExportParsingGeneratorTests
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload"),
-            new ArgumentOrCommandToken("Serve"),
+            new ArgumentOrCommandToken("serve-command"),
             new LongOptionToken("force"),
             new ArgumentOrCommandToken("true")
         ];
 
         var parsingResult = GetGeneratedParsingResult(result, "Fixtures.Command", arguments);
-        var subcommand = AssertSubcommand(parsingResult, "Serve");
+        var subcommand = AssertSubcommand(parsingResult, "serve-command");
         var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
         var childValues = AssertFinishedCollection(subcommand.ContinueParseAction());
 
         await Assert.That(parentValues.Command).IsNull();
-        await Assert.That(HasExplicitString(parentValues, "Input", "payload")).IsTrue();
-        await Assert.That(childValues.Command?.Information.Name.Value).IsEqualTo("Serve");
-        await Assert.That(HasExplicitBoolean(childValues, "Force")).IsTrue();
+        await Assert.That(HasExplicitString(parentValues, "input", "payload")).IsTrue();
+        await Assert.That(childValues.Command?.Information.Name.Value).IsEqualTo("serve-command");
+        await Assert.That(HasExplicitBoolean(childValues, "force-option")).IsTrue();
     }
 
     [Test]
-    public async Task ExportParsing_Populates_Enum_PossibleValues_For_Root_And_Subcommand_Properties()
+    public async Task CommandAttribute_Generates_ParsingExporter_And_Accepts_CommandSubcommands()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
 
             namespace Fixtures;
 
-            public enum RootMode
-            {
-                Basic = 0,
-                Advanced = 1
-            }
-
-            public enum ChildMode
-            {
-                Follow = 0,
-                Watch = 1
-            }
-
-            [ExportDocument]
-            [ExportSymbols]
             [Command]
             public partial class ChildCommand
             {
+                /// <summary>
+                /// Force summary
+                /// </summary>
                 [Property]
-                [LongAlias("mode")]
-                public ChildMode Mode { get; set; }
+                [LongAlias("force")]
+                public bool ForceOption { get; set; }
             }
 
-            [ExportDocument]
-            [ExportSymbols]
             [Command]
             public partial class Command
             {
-                [Property]
-                [LongAlias("mode")]
-                public RootMode Mode { get; set; }
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
 
-                [Property]
-                [LongAlias("name")]
-                public string Name { get; set; } = string.Empty;
-
+                /// <summary>
+                /// Serve summary
+                /// </summary>
                 [Subcommand]
-                public ChildCommand Serve { get; } = new();
+                public ChildCommand ServeCommand { get; } = new();
             }
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
         var builder = GetParsingBuilder(result, "Fixtures.Command");
         var snapshot = builder.Build();
-        var subcommandName = snapshot.SubcommandDefinitions["Serve"].Information.Name.Value;
-        var childSnapshot = snapshot.Subcommands[subcommandName];
+        var symbols = GetSymbols(result, "Fixtures.Command");
+        var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
-        await Assert.That(GetPossibleValueNames(snapshot.Properties["Mode"])).IsEquivalentTo(["Basic", "Advanced"]);
-        await Assert.That(snapshot.Properties["Name"].PossibleValues).IsNull();
-        await Assert.That(GetPossibleValueNames(childSnapshot.Properties["Mode"])).IsEquivalentTo(["Follow", "Watch"]);
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
+        await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("serve-command")).IsTrue();
+        await Assert.That(snapshot.Subcommands.ContainsKey(exportedSubcommand.Information.Name.Value)).IsTrue();
+        await Assert.That(snapshot.Subcommands[exportedSubcommand.Information.Name.Value].Properties.ContainsKey("force-option")).IsTrue();
     }
 
     [Test]
@@ -187,7 +183,8 @@ public class ExportParsingGeneratorTests
 
             namespace Fixtures;
 
-            [Command]
+            [ExportParsing]
+
             public class Command
             {
             }
@@ -208,7 +205,8 @@ public class ExportParsingGeneratorTests
 
             namespace Fixtures;
 
-            [Command]
+            [ExportParsing]
+
             public partial class Command
             {
             }
@@ -235,7 +233,8 @@ public class ExportParsingGeneratorTests
 
             [ExportDocument]
             [ExportSymbols]
-            [Command]
+            [ExportParsing]
+
             public partial class Command
             {
                 [Subcommand]
@@ -248,6 +247,26 @@ public class ExportParsingGeneratorTests
 
         await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
         await Assert.That(diagnostic.GetMessage()).Contains("IParsingExporter");
+    }
+
+    [Test]
+    public async Task Type_Without_Command_Or_ExportParsing_Does_Not_Generate_ParsingExporter()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+
+            public partial class Command
+            {
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsFalse();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
     }
 
     private static GeneratorRunOutcome RunGenerator(
@@ -431,19 +450,6 @@ public class ExportParsingGeneratorTests
         return collection.TryGetValue(definition, out var rawValue) &&
                rawValue is string typedValue &&
                string.Equals(typedValue, expectedValue, StringComparison.Ordinal);
-    }
-
-    private static string[] GetPossibleValueNames(PropertyDefinition definition)
-    {
-        if (definition.PossibleValues is not ICountablePossibleValues countable)
-        {
-            throw new InvalidOperationException(
-                $"Expected countable possible values for '{definition.Information.Name.Value}'.");
-        }
-
-        return countable.Candidates.Cast<object?>()
-            .Select(static candidate => candidate?.ToString() ?? string.Empty)
-            .ToArray();
     }
 
     private sealed record GeneratorRunOutcome(

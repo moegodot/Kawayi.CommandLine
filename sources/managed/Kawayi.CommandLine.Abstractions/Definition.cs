@@ -10,7 +10,7 @@ namespace Kawayi.CommandLine.Abstractions;
 public sealed record CommandDefinition(DefinitionInformation Information,
                                        ImmutableDictionary<string, NameWithVisibility> Alias,
                                        CommandDefinition? ParentCommand)
-    : Symbol(Information,ParentCommand);
+    : Symbol(Information, ParentCommand);
 
 public abstract record TypedDefinition(
     DefinitionInformation Information,

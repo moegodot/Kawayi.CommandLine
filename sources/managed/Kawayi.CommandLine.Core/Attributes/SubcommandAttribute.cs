@@ -6,7 +6,7 @@ namespace Kawayi.CommandLine.Core.Attributes;
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class SubcommandAttribute : SymbolAttribute
 {
-    public SubcommandAttribute(bool require = false,bool visible = true) : base(require,visible)
+    public SubcommandAttribute(bool require = false, bool visible = true) : base(require, visible)
     {
     }
 }

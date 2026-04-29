@@ -4,9 +4,12 @@
 namespace Kawayi.CommandLine.Core.Attributes;
 
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
-public sealed class LongAliasAttribute : AliasAttribute
+public sealed class ValidatorAttribute : Attribute
 {
-    public LongAliasAttribute(string alias, bool visible = true) : base(alias, visible)
+    public string ValidatorName { get; }
+
+    public ValidatorAttribute(string name)
     {
+        ValidatorName = name;
     }
 }

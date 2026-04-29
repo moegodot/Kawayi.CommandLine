@@ -1,8 +1,8 @@
 // Copyright (c) 2026 MoeGodot<me@kawayi.moe>.
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
-using System.Linq;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
 

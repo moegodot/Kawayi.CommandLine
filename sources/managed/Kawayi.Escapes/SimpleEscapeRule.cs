@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Kawayi.Escapes;
 
-public sealed record SimpleEscapeRule(ImmutableDictionary<string,string> RuleSet) : IEscapeRule
+public sealed record SimpleEscapeRule(ImmutableDictionary<string, string> RuleSet) : IEscapeRule
 {
     private readonly PreparedRules preparedRules = PreparedRules.Create(RuleSet);
 

@@ -23,7 +23,7 @@ public class TokenizerTests
     [Test]
     public async Task SimpleTokenize_Tests()
     {
-        ImmutableArray<string> input = ["target", "-s", "--long","or command","-s short","-- long","  "];
+        ImmutableArray<string> input = ["target", "-s", "--long", "or command", "-s short", "-- long", "  "];
 
         var tokenizer = new Tokenizer();
 
