@@ -66,7 +66,7 @@ class Program
         Helper.Update(UpdateContentDirectory);
 
         // new Maintainer(),
-        Maintenance[] maintenances = [new ProjectProps(),new Icon(),new Maintainer()];
+        Maintenance[] maintenances = [new ProjectProps(),new ProjectTargets(),new Icon(),new Maintainer()];
 
         foreach (Maintenance maintenance in maintenances)
         {
