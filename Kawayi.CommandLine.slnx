@@ -44,4 +44,7 @@
   <Folder Name="/vendors/" />
   <Folder Name="/benchmarks/" />
   <Folder Name="/documents/" />
+  <Folder Name="/engineering/">
+    <Project Path="engineering/Project.Maintainer/Project.Maintainer.csproj" />
+  </Folder>
 </Solution>

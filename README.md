@@ -1,6 +1,6 @@
 # Kawayi.CommandLine
 
-![打碎旧世界,建设新世界](https://raw.githubusercontent.com/moegodot/NewProject-CS/refs/heads/master/images/readme_image_1.jpg)
+![打碎旧世界,建设新世界](https://raw.githubusercontent.com/moegodot/NewProject-CS/refs/heads/master/images/readme_image_1.png)
 
 Kawayi.CommandLine 是一个面向 .NET 10 和 C# 14 的属性驱动命令行解析库。它把命令、参数、选项、子命令和帮助文本声明在普通 C# 类型上，并通过源生成器生成文档、符号、解析和绑定代码，让命令行入口保持清晰、可测试、可组合。
 
