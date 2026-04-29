@@ -93,7 +93,7 @@ public sealed class CommonParser
                                           string expect,
                                           TryParseDelegate<T> tryParse)
     {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].RawValue;
+        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
 
         if (arguments.IsDefaultOrEmpty)
         {
@@ -107,7 +107,7 @@ public sealed class CommonParser
 
         var token = arguments[^1];
 
-        if (tryParse(token.RawValue, out var parsedValue))
+        if (tryParse(token.Value, out var parsedValue))
         {
             return DebugOutput.Emit(options,
                                     new ParsingFinished<T>(parsedValue),
@@ -119,7 +119,7 @@ public sealed class CommonParser
         }
 
         return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.RawValue, expect, null),
+                                new InvalidArgumentDetected(token.Value, expect, null),
                                 new DebugContext(nameof(CommonParser),
                                                  Tokens: arguments,
                                                  TargetType: typeof(T),

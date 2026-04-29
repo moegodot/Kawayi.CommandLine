@@ -6,44 +6,65 @@ using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Core;
 
+/// <summary>
+/// Represents a single node in the parsed command result tree.
+/// </summary>
 public sealed class ParsingResultCollection : IParsingResultCollection
 {
     private readonly ImmutableDictionary<TypedDefinition, object?> _values;
+    private readonly Dictionary<CommandDefinition, IParsingResultCollection> _subcommands;
 
-    public ParsingResultCollection(ImmutableDictionary<string, CommandDefinition>? commands = null,
-                                   ImmutableDictionary<TypedDefinition, object?>? values = null)
+    /// <summary>
+    /// Initializes a new tree node for a parsed command scope.
+    /// </summary>
+    public ParsingResultCollection(CommandDefinition? command,
+                                   IParsingResultCollection? parent,
+                                   IParsingScopeMetadata scope,
+                                   ImmutableDictionary<TypedDefinition, object?>? values = null,
+                                   ImmutableDictionary<CommandDefinition, IParsingResultCollection>? subcommands = null)
     {
-        Commands = commands ?? ImmutableDictionary<string, CommandDefinition>.Empty;
+        Command = command;
+        Parent = parent;
+        Scope = scope ?? throw new ArgumentNullException(nameof(scope));
         _values = values ?? ImmutableDictionary<TypedDefinition, object?>.Empty;
+        _subcommands = subcommands?.ToDictionary(static pair => pair.Key, static pair => pair.Value)
+            ?? [];
     }
 
-    public ImmutableDictionary<string, CommandDefinition> Commands { get; }
+    /// <inheritdoc />
+    public CommandDefinition? Command { get; }
 
-    public object GetValue(TypedDefinition definition)
+    /// <inheritdoc />
+    public IParsingResultCollection? Parent { get; }
+
+    /// <inheritdoc />
+    public IParsingScopeMetadata Scope { get; }
+
+    /// <inheritdoc />
+    public bool TryGetValue(TypedDefinition definition, out object? value)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return _values.TryGetValue(definition, out value);
+    }
+
+    /// <inheritdoc />
+    public bool TryGetSubcommand(CommandDefinition definition, out IParsingResultCollection result)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (_values.TryGetValue(definition, out var explicitValue))
+        if (_subcommands.TryGetValue(definition, out result!))
         {
-            return explicitValue!;
+            return true;
         }
 
-        if (definition.DefaultValueFactory is not null)
-        {
-            return definition.DefaultValueFactory(this);
-        }
-
-        if (definition.Requirement)
-        {
-            throw new InvalidOperationException(
-                $"Required definition '{definition.Information.Name.Value}' does not have an explicit value or default factory.");
-        }
-
-        return GetClrDefault(definition.Type)!;
+        result = null!;
+        return false;
     }
 
-    private static object? GetClrDefault(Type type)
+    internal void SetDirectSubcommand(CommandDefinition definition, IParsingResultCollection result)
     {
-        return type.IsValueType ? Activator.CreateInstance(type) : null;
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(result);
+        _subcommands[definition] = result;
     }
 }

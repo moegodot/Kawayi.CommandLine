@@ -2,6 +2,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\sources\managed\Kawayi.CommandLine.Core\Kawayi.CommandLine.Core.csproj" />
+      <ProjectReference Include="..\..\sources\managed\Kawayi.CommandLine.Extensions\Kawayi.CommandLine.Extensions.csproj" />
     </ItemGroup>
 
 </Project>

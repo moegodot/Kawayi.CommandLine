@@ -7,5 +7,5 @@ namespace Kawayi.CommandLine.Abstractions;
 
 public interface ISymbolExporter
 {
-    static abstract ImmutableDictionary<string,Symbol> Symbols { get; }
+    static abstract ImmutableArray<Symbol> Symbols { get; }
 }

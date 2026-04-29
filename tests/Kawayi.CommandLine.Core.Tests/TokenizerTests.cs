@@ -52,4 +52,35 @@ public class TokenizerTests
         await Assert.That(result[0]).IsTypeOf<ShortOptionToken>().And.EqualTo(new(string.Empty));
         await Assert.That(result[1]).IsTypeOf<LongOptionToken>().And.EqualTo(new(string.Empty));
     }
+
+    [Test]
+    public async Task LongOptionWithInlineValue_Tokenize_Tests()
+    {
+        ImmutableArray<string> input = ["--format=json", "--env=a=b", "--empty="];
+
+        var tokenizer = new Tokenizer();
+
+        var result = tokenizer.Tokenlize(input);
+
+        await Assert.That(result.Length).IsEqualTo(3);
+        await Assert.That(result[0]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("format", "json"));
+        await Assert.That(result[1]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("env", "a=b"));
+        await Assert.That(result[2]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("empty", string.Empty));
+    }
+
+    [Test]
+    public async Task DashPrefixedOptionValues_Tokenize_As_OptionShaped_Tokens()
+    {
+        ImmutableArray<string> input = ["--count", "-1", "--linker-opts", "-L/bin/foo.a"];
+
+        var tokenizer = new Tokenizer();
+
+        var result = tokenizer.Tokenlize(input);
+
+        await Assert.That(result.Length).IsEqualTo(4);
+        await Assert.That(result[0]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("count"));
+        await Assert.That(result[1]).IsTypeOf<ShortOptionToken>().And.EqualTo(new ShortOptionToken("1"));
+        await Assert.That(result[2]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("linker-opts"));
+        await Assert.That(result[3]).IsTypeOf<ShortOptionToken>().And.EqualTo(new ShortOptionToken("L/bin/foo.a"));
+    }
 }

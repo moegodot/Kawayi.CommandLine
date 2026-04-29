@@ -47,7 +47,7 @@ public sealed class FloatParser    : Abstractions.IParsable<float>,
                                           string expect,
                                           TryParseDelegate<T> tryParse)
     {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].RawValue;
+        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
 
         if (arguments.IsDefaultOrEmpty)
         {
@@ -61,7 +61,7 @@ public sealed class FloatParser    : Abstractions.IParsable<float>,
 
         var token = arguments[^1];
 
-        if (tryParse(token.RawValue, out var parsedValue))
+        if (tryParse(token.Value, out var parsedValue))
         {
             return DebugOutput.Emit(options,
                                     new ParsingFinished<T>(parsedValue),
@@ -73,7 +73,7 @@ public sealed class FloatParser    : Abstractions.IParsable<float>,
         }
 
         return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.RawValue, expect, null),
+                                new InvalidArgumentDetected(token.Value, expect, null),
                                 new DebugContext(nameof(FloatParser),
                                                  Tokens: arguments,
                                                  TargetType: typeof(T),

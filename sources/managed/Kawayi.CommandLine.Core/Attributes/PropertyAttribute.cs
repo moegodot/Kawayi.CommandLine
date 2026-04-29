@@ -8,7 +8,10 @@ namespace Kawayi.CommandLine.Core.Attributes;
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class PropertyAttribute: SymbolAttribute
 {
-    public PropertyAttribute(bool visible, bool require) : base(visible, require)
+    public PropertyAttribute(bool require = false,bool visible = true,string? valueName = null) : base(require,visible)
     {
+        ValueName = valueName;
     }
+
+    public string? ValueName { get; }
 }

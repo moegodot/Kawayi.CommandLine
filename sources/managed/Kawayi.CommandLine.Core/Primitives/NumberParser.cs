@@ -95,7 +95,7 @@ public sealed class NumberParser
                                           string expect,
                                           TryParseDelegate<T> tryParse)
     {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].RawValue;
+        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
 
         if (arguments.IsDefaultOrEmpty)
         {
@@ -109,7 +109,7 @@ public sealed class NumberParser
 
         var token = arguments[^1];
 
-        if (tryParse(token.RawValue, out var parsedValue))
+        if (tryParse(token.Value, out var parsedValue))
         {
             return DebugOutput.Emit(options,
                                     new ParsingFinished<T>(parsedValue),
@@ -121,7 +121,7 @@ public sealed class NumberParser
         }
 
         return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.RawValue, expect, null),
+                                new InvalidArgumentDetected(token.Value, expect, null),
                                 new DebugContext(nameof(NumberParser),
                                                  Tokens: arguments,
                                                  TargetType: typeof(T),

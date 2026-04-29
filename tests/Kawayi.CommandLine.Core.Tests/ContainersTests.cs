@@ -96,6 +96,30 @@ public sealed class ContainersTests
     }
 
     [Test]
+    public async Task CreateParsing_Parses_ImmutableArray_Of_Enum()
+    {
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("basic"),
+            new ArgumentOrCommandToken("2")
+        ];
+
+        var result = Containers.CreateParsing(
+            DefaultOptions,
+            arguments,
+            new ContainerType(typeof(ImmutableArray<SampleMode>), null, typeof(SampleMode)));
+
+        if (result is not ParsingFinished { UntypedResult: ImmutableArray<SampleMode> values })
+        {
+            throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(values.Length).IsEqualTo(2);
+        await Assert.That(values[0]).IsEqualTo(SampleMode.Basic);
+        await Assert.That(values[1]).IsEqualTo(SampleMode.Advanced);
+    }
+
+    [Test]
     public async Task CreateParsing_Parses_ImmutableDictionary_And_Uses_Last_Value_For_Duplicates()
     {
         ImmutableArray<Token> arguments =
@@ -110,6 +134,29 @@ public sealed class ContainersTests
             new ContainerType(typeof(ImmutableDictionary<string, int>), typeof(string), typeof(int)));
 
         await AssertImmutableDictionary(result, [new KeyValuePair<string, int>("answer", 42)]);
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_ImmutableDictionary_With_Enum_Keys_And_Values()
+    {
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("basic=advanced"),
+            new ArgumentOrCommandToken("advanced=basic")
+        ];
+
+        var result = Containers.CreateParsing(
+            DefaultOptions,
+            arguments,
+            new ContainerType(typeof(ImmutableDictionary<SampleMode, SampleMode>), typeof(SampleMode), typeof(SampleMode)));
+
+        if (result is not ParsingFinished { UntypedResult: ImmutableDictionary<SampleMode, SampleMode> dictionary })
+        {
+            throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(dictionary[SampleMode.Basic]).IsEqualTo(SampleMode.Advanced);
+        await Assert.That(dictionary[SampleMode.Advanced]).IsEqualTo(SampleMode.Basic);
     }
 
     [Test]
@@ -146,6 +193,32 @@ public sealed class ContainersTests
             new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
 
         await AssertInvalidArgument(result, "not-an-int", "int at NumberStyles.Integer");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_For_Invalid_Enum_Element_Value()
+    {
+        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways")];
+
+        var result = Containers.CreateParsing(
+            DefaultOptions,
+            arguments,
+            new ContainerType(typeof(ImmutableArray<SampleMode>), null, typeof(SampleMode)));
+
+        await AssertInvalidArgument(result, "sideways", "SampleMode enum");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_For_Invalid_Enum_Dictionary_Key()
+    {
+        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways=basic")];
+
+        var result = Containers.CreateParsing(
+            DefaultOptions,
+            arguments,
+            new ContainerType(typeof(ImmutableDictionary<SampleMode, SampleMode>), typeof(SampleMode), typeof(SampleMode)));
+
+        await AssertInvalidArgument(result, "sideways", "SampleMode enum");
     }
 
     [Test]
@@ -242,5 +315,11 @@ public sealed class ContainersTests
         }
 
         await Assert.That(exception).IsNotNull();
+    }
+
+    private enum SampleMode
+    {
+        Basic = 1,
+        Advanced = 2
     }
 }

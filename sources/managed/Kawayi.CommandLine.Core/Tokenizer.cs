@@ -18,7 +18,16 @@ public sealed class Tokenizer : ITokenizer
 
             if (input.StartsWith("--", StringComparison.Ordinal))
             {
-                builder.Add(new LongOptionToken(input[2..]));
+                var optionText = input[2..];
+                var separatorIndex = optionText.IndexOf('=');
+
+                if (separatorIndex >= 0)
+                {
+                    builder.Add(new LongOptionToken(optionText[..separatorIndex], optionText[(separatorIndex + 1)..]));
+                    continue;
+                }
+
+                builder.Add(new LongOptionToken(optionText));
                 continue;
             }
 

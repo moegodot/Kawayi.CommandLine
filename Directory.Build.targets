@@ -7,4 +7,29 @@
     <MinVerSkip Condition="'$(_HasExternalExplicitVersion)' == 'true' Or '$(_HasProjectFileExplicitVersion)' == 'true'">true</MinVerSkip>
 
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsTestProject)' == 'true' and '$(EnableAotTestExecution)' == 'true' and $(RuntimeIdentifier.StartsWith('osx'))">
+    <LinkerArg Include="-L/opt/homebrew/lib" Condition="Exists('/opt/homebrew/lib')" />
+    <LinkerArg Include="-L/usr/local/lib" Condition="Exists('/usr/local/lib')" />
+    <LinkerArg Include="-L/opt/homebrew/opt/openssl@3/lib" Condition="Exists('/opt/homebrew/opt/openssl@3/lib')" />
+    <LinkerArg Include="-L/opt/homebrew/opt/openssl/lib" Condition="Exists('/opt/homebrew/opt/openssl/lib')" />
+    <LinkerArg Include="-L/usr/local/opt/openssl@3/lib" Condition="Exists('/usr/local/opt/openssl@3/lib')" />
+    <LinkerArg Include="-L/usr/local/opt/openssl/lib" Condition="Exists('/usr/local/opt/openssl/lib')" />
+  </ItemGroup>
+
+  <Target Name="RunAotTests"
+          Condition="'$(IsTestProject)' == 'true'"
+          DependsOnTargets="Publish">
+    <Error Condition="'$(EnableAotTestExecution)' != 'true'"
+           Text="RunAotTests requires -p:EnableAotTestExecution=true." />
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="RunAotTests requires a RuntimeIdentifier. Pass -p:AotTestRuntimeIdentifier=&lt;rid&gt; or -p:RuntimeIdentifier=&lt;rid&gt;." />
+
+    <PropertyGroup>
+      <_PublishedTestExecutable>$(PublishDir)$(AssemblyName)</_PublishedTestExecutable>
+      <_PublishedTestExecutable Condition="'$(OS)' == 'Windows_NT'">$(_PublishedTestExecutable).exe</_PublishedTestExecutable>
+    </PropertyGroup>
+
+    <Exec Command="&quot;$(_PublishedTestExecutable)&quot;" />
+  </Target>
 </Project>

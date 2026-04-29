@@ -8,6 +8,18 @@
         "resolved": "5.0.0-1.25277.114",
         "contentHash": "yJQeaub5SWJIXHP7mzPFLMfpO+ClpbTf+pBTHDCH2D3aIrttUoZf0oX8wbPN7Gl4du/IobMvPd5QYG696yJ37g=="
       },
+      "Microsoft.DotNet.ILCompiler": {
+        "type": "Direct",
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "GK32IZtLLCqkFynwZyseoxiEJ6+Fl3GSNJpaHte2JdRqCb65lR46/uUC4qzgBYw5PWx/QKq38Kgg5UjHenPBAw=="
+      },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "65aJw3nWbHCZDMcaqO6Gz0kHqUjp4KrIO/JUoRTxQN7JMgJjckUhMil2RtJKVhqEUjT+EymdJ1t4+N/7XSXd9w=="
+      },
       "Microsoft.SourceLink.GitHub": {
         "type": "Direct",
         "requested": "[10.0.201, )",

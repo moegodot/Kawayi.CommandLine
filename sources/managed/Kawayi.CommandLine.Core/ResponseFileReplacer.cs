@@ -22,9 +22,9 @@ public sealed class ResponseFileReplacer : IResponseFileReplacer
         foreach (var token in tokens)
         {
             if (token is ArgumentOrCommandToken argumentOrCommandToken &&
-                argumentOrCommandToken.RawValue.StartsWith('@'))
+                argumentOrCommandToken.Value.StartsWith('@'))
             {
-                var lines = File.ReadAllLines(argumentOrCommandToken.RawValue[1..]);
+                var lines = File.ReadAllLines(argumentOrCommandToken.Value[1..]);
 
                 foreach (var line in lines)
                 {

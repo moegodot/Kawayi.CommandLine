@@ -2,15 +2,19 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
+using Kawayi.CommandLine.Extensions;
 
 namespace Kawayi.CommandLine.Core.Tests;
 
 public sealed class ParsingBuilderTests
 {
     private static readonly ParsingOptions DefaultOptions = CreateOptions();
+    private static readonly Lock DefaultStyleEnvironmentLock = new();
+    private static readonly Lock DefaultDebugEnvironmentLock = new();
 
     [Test]
     public async Task CreateParsing_Parses_Bool_Scalar_And_Container_Options()
@@ -28,6 +32,7 @@ public sealed class ParsingBuilderTests
         ImmutableArray<Token> arguments =
         [
             new LongOptionToken("verbose"),
+            new ArgumentOrCommandToken("true"),
             new LongOptionToken("count"),
             new ArgumentOrCommandToken("42"),
             new LongOptionToken("tag"),
@@ -40,14 +45,198 @@ public sealed class ParsingBuilderTests
 
         var values = AssertFinishedCollection(result);
 
-        await Assert.That((bool)values.GetValue(verbose)).IsTrue();
-        await Assert.That((int)values.GetValue(count)).IsEqualTo(42);
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsTrue();
+        await Assert.That(GetEffectiveValue<int>(values, count)).IsEqualTo(42);
 
-        var actualTags = (ImmutableArray<int>)values.GetValue(tags);
+        var actualTags = GetEffectiveValue<ImmutableArray<int>>(values, tags);
 
         await Assert.That(actualTags.Length).IsEqualTo(2);
         await Assert.That(actualTags[0]).IsEqualTo(1);
         await Assert.That(actualTags[1]).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_Negative_Number_Option_Value()
+    {
+        var count = CreateProperty("count", typeof(int));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("count", count));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("count"),
+            new ShortOptionToken("1")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<int>(values, count)).IsEqualTo(-1);
+    }
+
+    [Test]
+    public async Task CreateParsing_Preserves_DashPrefixed_String_Option_Value()
+    {
+        var linkerOptions = CreateProperty("linkerOptions", typeof(string), longAliases: ["linker-opts"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("linkerOptions", linkerOptions));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("linker-opts"),
+            new ShortOptionToken("L/bin/foo.a")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, linkerOptions)).IsEqualTo("-L/bin/foo.a");
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_Long_Option_With_Inline_Value()
+    {
+        var format = CreateProperty("format", typeof(string));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("format", "json")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
+    }
+
+    [Test]
+    public async Task CreateParsing_Long_Option_With_Inline_Value_Does_Not_Consume_Following_Token()
+    {
+        var format = CreateProperty("format", typeof(string));
+        var path = CreateArgument("path", typeof(string), 0, 1);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            argument: [path],
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("format", "json"),
+            new ArgumentOrCommandToken("payload")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
+        await Assert.That(GetEffectiveValue<string>(values, path)).IsEqualTo("payload");
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_Bool_Scalar_Option_With_Inline_Value()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("verbose", "false")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_Bool_Scalar_Option_From_Short_Alias_With_Explicit_Value()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        ImmutableArray<Token> arguments =
+        [
+            new ShortOptionToken("v"),
+            new ArgumentOrCommandToken("false")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<bool>(values, verbose)).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_For_Bare_Bool_Long_Option()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        var result = Parse(builder, [new LongOptionToken("verbose")]);
+
+        if (result is not InvalidArgumentDetected invalidArgument)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalidArgument.Argument).IsEqualTo("verbose");
+        await Assert.That(invalidArgument.Expect).IsEqualTo("System.Boolean");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_For_Bare_Bool_Short_Option()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        var result = Parse(builder, [new ShortOptionToken("v")]);
+
+        if (result is not InvalidArgumentDetected invalidArgument)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalidArgument.Argument).IsEqualTo("verbose");
+        await Assert.That(invalidArgument.Expect).IsEqualTo("System.Boolean");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_For_NonBoolean_Scalar_Option_Value()
+    {
+        var verbose = CreateProperty("verbose", typeof(bool), shortAliases: ["v"]);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("verbose"),
+            new ArgumentOrCommandToken("maybe")
+        ];
+
+        var result = Parse(builder, arguments);
+
+        if (result is not InvalidArgumentDetected invalidArgument)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalidArgument.Argument).IsEqualTo("maybe");
+        await Assert.That(invalidArgument.Expect).IsEqualTo("bool");
     }
 
     [Test]
@@ -74,12 +263,16 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(rootBuilder, arguments);
         var subcommand = AssertSubcommand(result, serve);
-        var values = AssertFinishedCollection(subcommand.CommandAction());
+        var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
+        var values = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var root = AssertRoot(values);
+        var selectedServe = AssertSubcommandNode(root, serve);
 
-        await Assert.That(values.Commands.ContainsKey("serve")).IsTrue();
-        await Assert.That(values.Commands["serve"]).IsEqualTo(serve);
-        await Assert.That((string)values.GetValue(format)).IsEqualTo("json");
-        await Assert.That(values.GetValue(path)).IsNull();
+        _ = AssertRoot(parentValues);
+        await Assert.That(values.Command).IsEqualTo(serve);
+        await Assert.That(selectedServe).IsEqualTo(values);
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
+        await Assert.That(GetEffectiveValueOrDefault(root, path)).IsNull();
     }
 
     [Test]
@@ -100,6 +293,7 @@ public sealed class ParsingBuilderTests
         ImmutableArray<Token> arguments =
         [
             new LongOptionToken("verbose"),
+            new ArgumentOrCommandToken("true"),
             new ArgumentOrCommandToken("serve"),
             new LongOptionToken("format"),
             new ArgumentOrCommandToken("json")
@@ -107,10 +301,46 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(rootBuilder, arguments);
         var subcommand = AssertSubcommand(result, serve);
-        var values = AssertFinishedCollection(subcommand.CommandAction());
+        var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
+        var values = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var root = AssertRoot(values);
 
-        await Assert.That((bool)values.GetValue(verbose)).IsTrue();
-        await Assert.That((string)values.GetValue(format)).IsEqualTo("json");
+        _ = AssertRoot(parentValues);
+        await Assert.That(HasExplicitValue(parentValues, verbose, out bool parentVerbose)).IsTrue();
+        await Assert.That(parentVerbose).IsTrue();
+        await Assert.That(HasExplicitValue(root, verbose, out bool rootVerbose)).IsTrue();
+        await Assert.That(rootVerbose).IsTrue();
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
+    }
+
+    [Test]
+    public async Task CreateParsing_Matches_Subcommand_Alias()
+    {
+        var format = CreateProperty("format", typeof(string));
+        var serve = CreateCommand("serve", aliases: ["srv", "s"]);
+        var childBuilder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+        var rootBuilder = new ParsingBuilder(
+            DefaultOptions,
+            subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
+            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("srv"),
+            new LongOptionToken("format"),
+            new ArgumentOrCommandToken("json")
+        ];
+
+        var result = Parse(rootBuilder, arguments);
+        var subcommand = AssertSubcommand(result, serve);
+        var values = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var root = AssertRoot(values);
+
+        await Assert.That(values.Command).IsEqualTo(serve);
+        await Assert.That(AssertSubcommandNode(root, serve)).IsEqualTo(values);
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
     }
 
     [Test]
@@ -127,7 +357,7 @@ public sealed class ParsingBuilderTests
         rootBuilder.Properties["verbose"] = verbose;
         rootBuilder.Argument.Add(path);
 
-        var snapshot = rootBuilder.ToInput();
+        var snapshot = rootBuilder.Build();
 
         rootBuilder.Properties["later"] = CreateProperty("later", typeof(string));
         childBuilder.Properties["format"] = CreateProperty("format", typeof(string));
@@ -139,6 +369,64 @@ public sealed class ParsingBuilderTests
         await Assert.That(snapshot.Subcommands["serve"].Properties.ContainsKey("format")).IsFalse();
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
         await Assert.That(snapshot.Argument[0]).IsEqualTo(path);
+    }
+
+    [Test]
+    public async Task ParsingInputParser_CreateParsing_Matches_ParsingBuilder_Facade()
+    {
+        var count = CreateProperty("count", typeof(int));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("count", count));
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("count"),
+            new ArgumentOrCommandToken("42")
+        ];
+
+        var snapshot = builder.Build();
+        var facadeResult = ParsingBuilder.CreateParsing(builder.ParsingOptions, arguments, snapshot);
+        var parserResult = ParsingInputParser.CreateParsing(builder.ParsingOptions, arguments, snapshot);
+        var facadeValues = AssertFinishedCollection(facadeResult);
+        var parserValues = AssertFinishedCollection(parserResult);
+
+        await Assert.That(GetEffectiveValue<int>(facadeValues, count)).IsEqualTo(42);
+        await Assert.That(GetEffectiveValue<int>(parserValues, count)).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_Enum_Typed_Option()
+    {
+        var mode = CreateProperty("mode", typeof(SampleMode));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("mode", mode));
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("mode"),
+            new ArgumentOrCommandToken("advanced")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<SampleMode>(values, mode)).IsEqualTo(SampleMode.Advanced);
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_Enum_Typed_Argument()
+    {
+        var mode = CreateArgument("mode", typeof(SampleMode), 1, 1);
+        var builder = new ParsingBuilder(DefaultOptions, argument: [mode]);
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("ADVANCED")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<SampleMode>(values, mode)).IsEqualTo(SampleMode.Advanced);
     }
 
     [Test]
@@ -169,14 +457,26 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(rootBuilder, arguments);
         var serveSubcommand = AssertSubcommand(result, serve);
-        var watchSubcommand = AssertSubcommand(serveSubcommand.CommandAction(), watch);
-        var values = AssertFinishedCollection(watchSubcommand.CommandAction());
+        var root = AssertFinishedCollection(serveSubcommand.ParentCommand);
+        var watchSubcommand = AssertSubcommand(serveSubcommand.ContinueParseAction(), watch);
+        var serveNode = AssertFinishedCollection(watchSubcommand.ParentCommand);
+        var values = AssertFinishedCollection(watchSubcommand.ContinueParseAction());
+        var actualServeNode = AssertParent(values, serve);
+        var actualRoot = AssertRoot(actualServeNode);
+        var selectedServe = AssertSubcommandNode(actualRoot, serve);
+        var selectedWatch = AssertSubcommandNode(actualServeNode, watch);
 
-        await Assert.That(values.Commands.ContainsKey("serve")).IsTrue();
-        await Assert.That(values.Commands.ContainsKey("watch")).IsTrue();
-        await Assert.That(values.Commands["serve"]).IsEqualTo(serve);
-        await Assert.That(values.Commands["watch"]).IsEqualTo(watch);
-        await Assert.That((int)values.GetValue(interval)).IsEqualTo(5);
+        _ = AssertRoot(root);
+        await Assert.That(serveNode.Command).IsEqualTo(serve);
+        await Assert.That(AssertRoot(serveNode)).IsNotNull();
+        await Assert.That(values.Command).IsEqualTo(watch);
+        await Assert.That(selectedServe).IsEqualTo(actualServeNode);
+        await Assert.That(selectedWatch).IsEqualTo(values);
+        await Assert.That(GetEffectiveValue<int>(values, interval)).IsEqualTo(5);
+        await Assert.That(actualRoot.Scope.AvailableSubcommands.Contains(serve)).IsTrue();
+        await Assert.That(actualServeNode.Scope.AvailableSubcommands.Contains(watch)).IsTrue();
+        await Assert.That(actualRoot.TryGetSubcommand(watch, out _)).IsFalse();
+        await Assert.That(values.Scope.AvailableTypedDefinitions.Contains(interval)).IsTrue();
     }
 
     [Test]
@@ -250,13 +550,13 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(builder, arguments);
         var values = AssertFinishedCollection(result);
-        var actualHead = (ImmutableArray<string>)values.GetValue(head);
+        var actualHead = GetEffectiveValue<ImmutableArray<string>>(values, head);
 
         await Assert.That(actualHead.Length).IsEqualTo(3);
         await Assert.That(actualHead[0]).IsEqualTo("a");
         await Assert.That(actualHead[1]).IsEqualTo("b");
         await Assert.That(actualHead[2]).IsEqualTo("c");
-        await Assert.That((string)values.GetValue(tail)).IsEqualTo("d");
+        await Assert.That(GetEffectiveValue<string>(values, tail)).IsEqualTo("d");
     }
 
     [Test]
@@ -270,10 +570,10 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(builder, arguments);
         var values = AssertFinishedCollection(result);
-        var actualHead = (ImmutableArray<string>)values.GetValue(head);
+        var actualHead = GetEffectiveValue<ImmutableArray<string>>(values, head);
 
         await Assert.That(actualHead.IsDefaultOrEmpty).IsTrue();
-        await Assert.That((string)values.GetValue(tail)).IsEqualTo("d");
+        await Assert.That(GetEffectiveValue<string>(values, tail)).IsEqualTo("d");
     }
 
     [Test]
@@ -311,13 +611,13 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(builder, arguments);
         var values = AssertFinishedCollection(result);
-        var actualMiddle = (ImmutableArray<string>)values.GetValue(middle);
+        var actualMiddle = GetEffectiveValue<ImmutableArray<string>>(values, middle);
 
-        await Assert.That((string)values.GetValue(first)).IsEqualTo("a");
+        await Assert.That(GetEffectiveValue<string>(values, first)).IsEqualTo("a");
         await Assert.That(actualMiddle.Length).IsEqualTo(2);
         await Assert.That(actualMiddle[0]).IsEqualTo("b");
         await Assert.That(actualMiddle[1]).IsEqualTo("c");
-        await Assert.That((string)values.GetValue(last)).IsEqualTo("d");
+        await Assert.That(GetEffectiveValue<string>(values, last)).IsEqualTo("d");
     }
 
     [Test]
@@ -371,13 +671,17 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(rootBuilder, arguments);
         var subcommand = AssertSubcommand(result, serve);
-        var values = AssertFinishedCollection(subcommand.CommandAction());
-        var actualFiles = (ImmutableArray<string>)values.GetValue(files);
+        var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
+        var values = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var root = AssertRoot(values);
+        var actualFiles = GetEffectiveValue<ImmutableArray<string>>(root, files);
 
+        _ = AssertRoot(parentValues);
         await Assert.That(actualFiles.Length).IsEqualTo(1);
         await Assert.That(actualFiles[0]).IsEqualTo("a");
-        await Assert.That((string)values.GetValue(target)).IsEqualTo("b");
-        await Assert.That((string)values.GetValue(format)).IsEqualTo("json");
+        await Assert.That(GetEffectiveValue<string>(parentValues, target)).IsEqualTo("b");
+        await Assert.That(GetEffectiveValue<string>(root, target)).IsEqualTo("b");
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
     }
 
     [Test]
@@ -470,13 +774,180 @@ public sealed class ParsingBuilderTests
     }
 
     [Test]
-    public async Task ArgumentArity_Throws_When_Minimum_Is_Greater_Than_Maximum()
+    public async Task ValueRange_Throws_When_Minimum_Is_Greater_Than_Maximum()
     {
-        await Assert.That(() => new ArgumentArity(2, 1)).Throws<ArgumentException>();
+        await Assert.That(() => new ValueRange(2, 1)).Throws<ArgumentException>();
     }
 
     [Test]
-    public async Task ParsingResultCollection_GetValue_Uses_Explicit_Values_Default_Factories_And_Clr_Defaults()
+    public async Task CreateParsing_Parses_Property_When_ValueCount_Matches_Explicit_ValueRange()
+    {
+        var format = CreateProperty("format", typeof(string), numArgs: new ValueRange(1, 1));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("format"),
+            new ArgumentOrCommandToken("json")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("json");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_When_Property_Receives_Fewer_Values_Than_Allowed()
+    {
+        var format = CreateProperty("format", typeof(string), numArgs: new ValueRange(1, 1));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        var result = Parse(builder, []);
+
+        if (result is not InvalidArgumentDetected invalid)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalid.Argument).IsEqualTo("format");
+        await Assert.That(invalid.Expect).IsEqualTo("exactly 1 value(s)");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_When_Property_Receives_More_Values_Than_Allowed()
+    {
+        var format = CreateProperty("format", typeof(string), numArgs: new ValueRange(1, 1));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("format"),
+            new ArgumentOrCommandToken("json"),
+            new LongOptionToken("format"),
+            new ArgumentOrCommandToken("yaml")
+        ];
+
+        var result = Parse(builder, arguments);
+
+        if (result is not InvalidArgumentDetected invalid)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalid.Argument).IsEqualTo("format");
+        await Assert.That(invalid.Expect).IsEqualTo("exactly 1 value(s)");
+    }
+
+    [Test]
+    public async Task CreateParsing_Counts_Inline_Long_Option_Value_Towards_Property_ValueRange()
+    {
+        var format = CreateProperty("format", typeof(string), numArgs: new ValueRange(1, 1));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("format", "json"),
+            new LongOptionToken("format", "yaml")
+        ];
+
+        var result = Parse(builder, arguments);
+
+        if (result is not InvalidArgumentDetected invalid)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalid.Argument).IsEqualTo("format");
+        await Assert.That(invalid.Expect).IsEqualTo("exactly 1 value(s)");
+    }
+
+    [Test]
+    public async Task CreateParsing_Default_Property_ValueRange_Allows_Repeated_Scalar_Options()
+    {
+        var format = CreateProperty("format", typeof(string));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("format"),
+            new ArgumentOrCommandToken("json"),
+            new LongOptionToken("format"),
+            new ArgumentOrCommandToken("yaml")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("yaml");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_UnknownArgument_For_Unknown_Long_Option_With_Inline_Value()
+    {
+        var builder = new ParsingBuilder(DefaultOptions);
+
+        var result = Parse(builder, [new LongOptionToken("unknown", "value")]);
+
+        if (result is not UnknownArgumentDetected unknown)
+        {
+            throw new InvalidOperationException($"Expected {nameof(UnknownArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(unknown.UnknownArgument).IsEqualTo("--unknown");
+    }
+
+    [Test]
+    public async Task CreateParsing_Preserves_Empty_Inline_Long_Option_Value()
+    {
+        var format = CreateProperty("format", typeof(string));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        var result = Parse(builder, [new LongOptionToken("format", string.Empty)]);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo(string.Empty);
+    }
+
+    [Test]
+    public async Task CreateParsing_Aggregates_Property_ValueRange_Across_Repeated_Occurrences()
+    {
+        var tag = CreateProperty("tag", typeof(ImmutableArray<string>), numArgs: new ValueRange(2, 2));
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("tag", tag));
+
+        ImmutableArray<Token> arguments =
+        [
+            new LongOptionToken("tag"),
+            new ArgumentOrCommandToken("a"),
+            new LongOptionToken("tag"),
+            new ArgumentOrCommandToken("b")
+        ];
+
+        var result = Parse(builder, arguments);
+        var values = AssertFinishedCollection(result);
+        var actualTags = GetEffectiveValue<ImmutableArray<string>>(values, tag);
+
+        await Assert.That(actualTags.Length).IsEqualTo(2);
+        await Assert.That(actualTags[0]).IsEqualTo("a");
+        await Assert.That(actualTags[1]).IsEqualTo("b");
+    }
+
+    [Test]
+    public async Task ParsingResultCollection_Separates_Explicit_And_Effective_Values()
     {
         var explicitProperty = CreateProperty("explicit", typeof(string));
         var defaultedProperty = CreateProperty("defaulted", typeof(int)) with
@@ -485,14 +956,21 @@ public sealed class ParsingBuilderTests
         };
         var clrDefaultProperty = CreateProperty("plain", typeof(bool));
         var command = CreateCommand("serve");
+        var scope = new TestScopeMetadata([command], [explicitProperty, defaultedProperty, clrDefaultProperty]);
         var collection = new ParsingResultCollection(
-            ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", command),
+            null,
+            null,
+            scope,
             ImmutableDictionary<TypedDefinition, object?>.Empty.Add(explicitProperty, "value"));
 
-        await Assert.That((string)collection.GetValue(explicitProperty)).IsEqualTo("value");
-        await Assert.That((int)collection.GetValue(defaultedProperty)).IsEqualTo(7);
-        await Assert.That((bool)collection.GetValue(clrDefaultProperty)).IsFalse();
-        await Assert.That(collection.Commands["serve"]).IsEqualTo(command);
+        await Assert.That(HasExplicitValue(collection, explicitProperty, out string? explicitValue)).IsTrue();
+        await Assert.That(explicitValue).IsEqualTo("value");
+        await Assert.That(collection.TryGetValue(defaultedProperty, out _)).IsFalse();
+        await Assert.That(GetEffectiveValue<string>(collection, explicitProperty)).IsEqualTo("value");
+        await Assert.That(GetEffectiveValue<int>(collection, defaultedProperty)).IsEqualTo(7);
+        await Assert.That(GetEffectiveValue<bool>(collection, clrDefaultProperty)).IsFalse();
+        await Assert.That(collection.Scope.AvailableSubcommands.Contains(command)).IsTrue();
+        await Assert.That(collection.Scope.AvailableTypedDefinitions.Contains(defaultedProperty)).IsTrue();
     }
 
     [Test]
@@ -535,8 +1013,8 @@ public sealed class ParsingBuilderTests
         await Assert.That(output).Contains("test [<input>]");
         await Assert.That(output).Contains("test <subcommand>");
         await Assert.That(output).Contains("Options");
-        await Assert.That(output).Contains("-v, --verbose");
-        await Assert.That(output).Contains("--format <format>");
+        await Assert.That(output).Contains("-v, --verbose <bool>");
+        await Assert.That(output).Contains("--format <string>");
         await Assert.That(output).Contains("Possible values:");
         await Assert.That(output).Contains("json, yaml, toml");
         await Assert.That(output).Contains("Arguments");
@@ -545,6 +1023,34 @@ public sealed class ParsingBuilderTests
         await Assert.That(output).Contains("serve");
         await Assert.That(output).Contains("Run the server");
         await Assert.That(output.Contains("\u001b[", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Includes_Visible_Subcommand_Aliases()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var serve = CreateCommand("serve", summary: "Run the server", helpText: "Serve command help", aliases: ["srv", "s"]);
+        var childBuilder = new ParsingBuilder(options);
+        var builder = new ParsingBuilder(
+            options,
+            subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
+            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        var output = writer.ToString();
+
+        await Assert.That(output).Contains("Subcommands");
+        await Assert.That(output).Contains("serve, s, srv");
+        await Assert.That(output).Contains("test <subcommand>");
     }
 
     [Test]
@@ -575,7 +1081,7 @@ public sealed class ParsingBuilderTests
 
         var result = Parse(builder, arguments);
         var subcommand = AssertSubcommand(result, serve);
-        var childResult = subcommand.CommandAction();
+        var childResult = subcommand.ContinueParseAction();
 
         if (childResult is not HelpFlagsDetected help)
         {
@@ -589,10 +1095,188 @@ public sealed class ParsingBuilderTests
         await Assert.That(output).Contains("serve");
         await Assert.That(output).Contains("serve [options]");
         await Assert.That(output).Contains("Serve command help");
-        await Assert.That(output).Contains("-f, --format <format>");
+        await Assert.That(output).Contains("-f, --format <string>");
         await Assert.That(output).Contains("Possible values:");
         await Assert.That(output).Contains("json, yaml or any plugin-provided serializer");
         await Assert.That(output.Contains("-v, --verbose", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Auto_Includes_Enum_Possible_Values_For_Options()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var mode = CreateProperty("mode", typeof(SampleMode));
+        var builder = new ParsingBuilder(
+            options,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("mode", mode));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        var output = writer.ToString();
+
+        await Assert.That(output).Contains("--mode <SampleMode>");
+        await Assert.That(output).Contains("Possible values:");
+        await Assert.That(output).Contains("Basic, Advanced");
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Uses_Bool_Metavar_For_Bool_Options()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var enabled = CreateProperty("enabled", typeof(bool));
+        var builder = new ParsingBuilder(
+            options,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("enabled", enabled));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        await Assert.That(writer.ToString()).Contains("--enabled <bool>");
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Prefers_Explicit_ValueName_For_Bool_Options()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var enabled = CreateProperty("enabled", typeof(bool), valueName: "enabled");
+        var builder = new ParsingBuilder(
+            options,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("enabled", enabled));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        await Assert.That(writer.ToString()).Contains("--enabled <enabled>");
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Prefers_Explicit_ValueName_For_Options()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var format = CreateProperty("format", typeof(string), valueName: "format");
+        var builder = new ParsingBuilder(
+            options,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", format));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        await Assert.That(writer.ToString()).Contains("--format <format>");
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Uses_Type_Display_Names_For_Options()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var requestId = CreateProperty("requestId", typeof(Guid), longAliases: ["request-id"]);
+        var tags = CreateProperty("tags", typeof(ImmutableArray<string>), longAliases: ["tag"]);
+        var env = CreateProperty("env", typeof(ImmutableDictionary<string, string>), shortAliases: ["e"]);
+        var optionalCount = CreateProperty("optionalCount", typeof(int?), longAliases: ["optional-count"]);
+        var builder = new ParsingBuilder(
+            options,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty
+                .Add("requestId", requestId)
+                .Add("tags", tags)
+                .Add("env", env)
+                .Add("optionalCount", optionalCount));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        var output = writer.ToString();
+
+        await Assert.That(output).Contains("--request-id <Guid>");
+        await Assert.That(output).Contains("--tag <ImmutableArray<string>>");
+        await Assert.That(output).Contains("-e, --env <ImmutableDictionary<string, string>>");
+        await Assert.That(output).Contains("--optional-count <int?>");
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Auto_Includes_Enum_Possible_Values_For_Arguments()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var mode = CreateArgument("mode", typeof(SampleMode), 1, 1);
+        var builder = new ParsingBuilder(options, argument: [mode]);
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        var output = writer.ToString();
+
+        await Assert.That(output).Contains("Arguments");
+        await Assert.That(output).Contains("mode");
+        await Assert.That(output).Contains("Possible values:");
+        await Assert.That(output).Contains("Basic, Advanced");
+    }
+
+    [Test]
+    public async Task CreateParsing_Help_Prefers_Explicit_Possible_Values_Over_Enum_Names()
+    {
+        var writer = new StringWriter();
+        var options = CreateOptions(writer, enableStyle: false);
+        var mode = CreateProperty("mode",
+                                  typeof(SampleMode),
+                                  possibleValues: new CountablePossibleValues<string>(["custom-mode"]));
+        var builder = new ParsingBuilder(
+            options,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("mode", mode));
+
+        var result = Parse(builder, [new LongOptionToken("help")]);
+
+        if (result is not HelpFlagsDetected help)
+        {
+            throw new InvalidOperationException($"Expected {nameof(HelpFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        help.FlagAction();
+
+        var output = writer.ToString();
+
+        await Assert.That(output).Contains("custom-mode");
+        await Assert.That(output.Contains("Basic, Advanced", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]
@@ -668,7 +1352,7 @@ public sealed class ParsingBuilderTests
         var result = Parse(builder, arguments);
         var values = AssertFinishedCollection(result);
 
-        await Assert.That((string)values.GetValue(format)).IsEqualTo("xml");
+        await Assert.That(GetEffectiveValue<string>(values, format)).IsEqualTo("xml");
     }
 
     [Test]
@@ -685,6 +1369,29 @@ public sealed class ParsingBuilderTests
     {
         await Assert.That(ReadDefaultDebug(null)).IsFalse();
         await Assert.That(ReadDefaultDebug("nope")).IsFalse();
+    }
+
+    [Test]
+    public async Task ParsingOptions_DefaultStyle_Disables_Style_When_NoColor_Is_Present_And_Not_Empty()
+    {
+        foreach (var value in new[] { "1", "true", "0", "off" })
+        {
+            await Assert.That(ReadDefaultStyle(noColorValue: value)).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task ParsingOptions_DefaultStyle_Ignores_Empty_NoColor_Value()
+    {
+        await Assert.That(ReadDefaultStyle(noColorValue: string.Empty)).IsTrue();
+    }
+
+    [Test]
+    public async Task ParsingOptions_DefaultStyle_Preserves_Legacy_NoColor_And_Ci_Behavior()
+    {
+        await Assert.That(ReadDefaultStyle(legacyNoColorValue: "1")).IsFalse();
+        await Assert.That(ReadDefaultStyle(legacyNoColorValue: "nope")).IsTrue();
+        await Assert.That(ReadDefaultStyle(ciValue: "yes")).IsFalse();
     }
 
     [Test]
@@ -707,9 +1414,9 @@ public sealed class ParsingBuilderTests
         var values = AssertFinishedCollection(result);
         var output = writer.ToString();
 
-        await Assert.That((int)values.GetValue(count)).IsEqualTo(42);
+        await Assert.That(GetEffectiveValue<int>(values, count)).IsEqualTo(42);
         await Assert.That(output).Contains("Debug Parse Result");
-        await Assert.That(output).Contains("Source: ParsingBuilder");
+        await Assert.That(output).Contains("Source: ParsingInputParser");
         await Assert.That(output).Contains("Source: NumberParser");
         await Assert.That(output).Contains("Tokens: --count 42");
         await Assert.That(output).Contains("State: success");
@@ -752,18 +1459,18 @@ public sealed class ParsingBuilderTests
         await Assert.That(firstOutput).Contains("Trigger token: serve");
         await Assert.That(firstOutput).Contains("State: deferred");
 
-        var secondResult = firstSubcommand.CommandAction();
+        var secondResult = firstSubcommand.ContinueParseAction();
         var secondSubcommand = AssertSubcommand(secondResult, watch);
         var secondOutput = writer.ToString();
 
         await Assert.That(secondOutput).Contains("Command: watch");
         await Assert.That(secondOutput).Contains("Trigger token: watch");
 
-        var finalResult = secondSubcommand.CommandAction();
+        var finalResult = secondSubcommand.ContinueParseAction();
         var values = AssertFinishedCollection(finalResult);
         var finalOutput = writer.ToString();
 
-        await Assert.That((int)values.GetValue(interval)).IsEqualTo(5);
+        await Assert.That(GetEffectiveValue<int>(values, interval)).IsEqualTo(5);
         await Assert.That(finalOutput).Contains("Summary: commands=serve, watch");
     }
 
@@ -859,6 +1566,45 @@ public sealed class ParsingBuilderTests
     }
 
     [Test]
+    public async Task StyleTable_Default_Preserves_Representative_Default_Styles()
+    {
+        await Assert.That(StyleTable.Default.HelpTitleStyle)
+            .IsEqualTo(new Style(Color.Sky, Color.None, true, false, false));
+        await Assert.That(StyleTable.Default.PossibleValuesValueStyle)
+            .IsEqualTo(new Style(Color.Amber, Color.None, false, false, false));
+        await Assert.That(StyleTable.Default.DebugFailureStyle)
+            .IsEqualTo(new Style(Color.Rose, Color.None, true, false, false));
+    }
+
+    [Test]
+    public async Task CreateParsing_Uses_Custom_StyleTable_For_Styled_Version_Output()
+    {
+        var writer = new StringWriter();
+        var customProgramNameStyle = new Style(new Color(12, 34, 56, 255), Color.None, true, false, false);
+        var options = CreateOptions(
+            writer,
+            enableStyle: true,
+            styleTable: StyleTable.Default with
+            {
+                ProgramNameStyle = customProgramNameStyle
+            });
+        var builder = new ParsingBuilder(options);
+
+        var result = Parse(builder, [new LongOptionToken("version")]);
+
+        if (result is not VersionFlagsDetected version)
+        {
+            throw new InvalidOperationException($"Expected {nameof(VersionFlagsDetected)}, got {result.GetType().FullName}.");
+        }
+
+        version.FlagAction();
+
+        var output = writer.ToString();
+
+        await Assert.That(output).Contains($"{customProgramNameStyle.ToAnsiCode()}test{Style.ClearStyle}");
+    }
+
+    [Test]
     public async Task StyledStringBuilder_Falls_Back_To_Plain_Text_When_Style_Is_Disabled()
     {
         var builder = new StyledStringBuilder(false);
@@ -888,7 +1634,7 @@ public sealed class ParsingBuilderTests
 
     private static ParsingResult Parse(ParsingBuilder builder, ImmutableArray<Token> arguments)
     {
-        return ParsingBuilder.CreateParsing(builder.ParsingOptions, arguments, builder.ToInput());
+        return ParsingBuilder.CreateParsing(builder.ParsingOptions, arguments, builder.Build());
     }
 
     private static Subcommand AssertSubcommand(ParsingResult result, CommandDefinition expected)
@@ -907,17 +1653,94 @@ public sealed class ParsingBuilderTests
         return subcommand;
     }
 
+    private static IParsingResultCollection AssertRoot(IParsingResultCollection result)
+    {
+        var current = result;
+
+        while (current.Parent is not null)
+        {
+            current = current.Parent;
+        }
+
+        await_root_is_null(current);
+        return current;
+
+        static void await_root_is_null(IParsingResultCollection node)
+        {
+            if (node.Command is not null)
+            {
+                throw new InvalidOperationException($"Expected root result to have null command, got '{node.Command.Information.Name.Value}'.");
+            }
+        }
+    }
+
+    private static IParsingResultCollection AssertParent(IParsingResultCollection result, CommandDefinition expected)
+    {
+        var parent = result.Parent
+            ?? throw new InvalidOperationException($"Expected parent command '{expected.Information.Name.Value}', but result has no parent.");
+
+        if (!EqualityComparer<CommandDefinition?>.Default.Equals(parent.Command, expected))
+        {
+            throw new InvalidOperationException(
+                $"Expected parent command '{expected.Information.Name.Value}', got '{parent.Command?.Information.Name.Value ?? "<root>"}'.");
+        }
+
+        return parent;
+    }
+
+    private static IParsingResultCollection AssertSubcommandNode(IParsingResultCollection result, CommandDefinition expected)
+    {
+        if (!result.TryGetSubcommand(expected, out var child))
+        {
+            throw new InvalidOperationException(
+                $"Expected direct subcommand '{expected.Information.Name.Value}' to be selected.");
+        }
+
+        if (!EqualityComparer<CommandDefinition?>.Default.Equals(child.Command, expected))
+        {
+            throw new InvalidOperationException(
+                $"Expected direct subcommand node '{expected.Information.Name.Value}', got '{child.Command?.Information.Name.Value ?? "<root>"}'.");
+        }
+
+        return child;
+    }
+
+    private static bool HasExplicitValue<T>(IParsingResultCollection result, TypedDefinition definition, out T value)
+    {
+        if (result.TryGetValue(definition, out var rawValue) && rawValue is T typedValue)
+        {
+            value = typedValue;
+            return true;
+        }
+
+        value = default!;
+        return false;
+    }
+
+    private static T GetEffectiveValue<T>(IParsingResultCollection result, TypedDefinition definition)
+    {
+        return (T)result.GetEffectiveValueOrDefault(definition)!;
+    }
+
+    private static object? GetEffectiveValueOrDefault(IParsingResultCollection result, TypedDefinition definition)
+    {
+        return result.GetEffectiveValueOrDefault(definition);
+    }
+
     private static DefinitionInformation CreateInformation(string name)
     {
         return new DefinitionInformation(new NameWithVisibility(name, true), new Document(name, name));
     }
 
     private static PropertyDefinition CreateProperty(string name,
+                                                     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
                                                      Type type,
                                                      bool required = false,
                                                      ImmutableArray<string> longAliases = default,
                                                      ImmutableArray<string> shortAliases = default,
-                                                     PossibleValues? possibleValues = null)
+                                                     PossibleValues? possibleValues = null,
+                                                     string? valueName = null,
+                                                     ValueRange? numArgs = null)
     {
         var longNames = ImmutableDictionary.CreateBuilder<string, NameWithVisibility>(StringComparer.Ordinal);
         var shortNames = ImmutableDictionary.CreateBuilder<string, NameWithVisibility>(StringComparer.Ordinal);
@@ -940,11 +1763,14 @@ public sealed class ParsingBuilderTests
             type,
             required)
         {
+            NumArgs = numArgs ?? ValueRange.ZeroOrMore,
+            ValueName = valueName,
             PossibleValues = possibleValues
         };
     }
 
     private static ArgumentDefinition CreateArgument(string name,
+                                                     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
                                                      Type type,
                                                      int minimum,
                                                      int maximum,
@@ -953,7 +1779,7 @@ public sealed class ParsingBuilderTests
         return new ArgumentDefinition(
             CreateInformation(name),
             null,
-            new ArgumentArity(minimum, maximum),
+            new ValueRange(minimum, maximum),
             type,
             required);
     }
@@ -963,14 +1789,28 @@ public sealed class ParsingBuilderTests
         return CreateCommand(name, name, name);
     }
 
-    private static CommandDefinition CreateCommand(string name, string summary, string helpText)
+    private static CommandDefinition CreateCommand(string name, params string[] aliases)
+    {
+        return CreateCommand(name, name, name, aliases);
+    }
+
+    private static CommandDefinition CreateCommand(string name,
+                                                  string summary,
+                                                  string helpText,
+                                                  params string[] aliases)
     {
         return new CommandDefinition(
             new DefinitionInformation(new NameWithVisibility(name, true), new Document(summary, helpText)),
+            aliases.ToImmutableDictionary(static alias => alias,
+                                          static alias => new NameWithVisibility(alias, true),
+                                          StringComparer.Ordinal),
             null);
     }
 
-    private static ParsingOptions CreateOptions(TextWriter? output = null, bool enableStyle = false, bool debug = false)
+    private static ParsingOptions CreateOptions(TextWriter? output = null,
+                                               bool enableStyle = false,
+                                               bool debug = false,
+                                               StyleTable? styleTable = null)
     {
         return new ParsingOptions(
             new ProgramInformation("test", new Document("test", "test help"), new Version(1, 0), "https://example.com"),
@@ -978,23 +1818,53 @@ public sealed class ParsingBuilderTests
             ParsingOptions.DefaultHelpFlags,
             output ?? TextWriter.Null,
             enableStyle,
-            debug);
+            debug,
+            styleTable ?? StyleTable.Default);
     }
 
     private static bool ReadDefaultDebug(string? value)
     {
-        var original = Environment.GetEnvironmentVariable("CLI_DEBUG");
+        lock (DefaultDebugEnvironmentLock)
+        {
+            var original = Environment.GetEnvironmentVariable("CLI_DEBUG");
 
-        try
-        {
-            Environment.SetEnvironmentVariable("CLI_DEBUG", value);
-            ResetParsingOptionsField("_defaultDebug");
-            return ParsingOptions.DefaultDebug;
+            try
+            {
+                Environment.SetEnvironmentVariable("CLI_DEBUG", value);
+                ResetParsingOptionsField("_defaultDebug");
+                return ParsingOptions.DefaultDebug;
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("CLI_DEBUG", original);
+                ResetParsingOptionsField("_defaultDebug");
+            }
         }
-        finally
+    }
+
+    private static bool ReadDefaultStyle(string? noColorValue = null, string? legacyNoColorValue = null, string? ciValue = null)
+    {
+        lock (DefaultStyleEnvironmentLock)
         {
-            Environment.SetEnvironmentVariable("CLI_DEBUG", original);
-            ResetParsingOptionsField("_defaultDebug");
+            var originalNoColor = Environment.GetEnvironmentVariable("NO_COLOR");
+            var originalLegacyNoColor = Environment.GetEnvironmentVariable("NOCOLOR");
+            var originalCi = Environment.GetEnvironmentVariable("CI");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("NO_COLOR", noColorValue);
+                Environment.SetEnvironmentVariable("NOCOLOR", legacyNoColorValue);
+                Environment.SetEnvironmentVariable("CI", ciValue);
+                ResetParsingOptionsField("_defaultStyle");
+                return ParsingOptions.DefaultStyle;
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("NO_COLOR", originalNoColor);
+                Environment.SetEnvironmentVariable("NOCOLOR", originalLegacyNoColor);
+                Environment.SetEnvironmentVariable("CI", originalCi);
+                ResetParsingOptionsField("_defaultStyle");
+            }
         }
     }
 
@@ -1004,5 +1874,15 @@ public sealed class ParsingBuilderTests
             ?? throw new InvalidOperationException($"Field '{fieldName}' was not found.");
 
         field.SetValue(null, null);
+    }
+
+    private sealed record TestScopeMetadata(ImmutableArray<CommandDefinition> AvailableSubcommands,
+                                            ImmutableArray<TypedDefinition> AvailableTypedDefinitions)
+        : IParsingScopeMetadata;
+
+    private enum SampleMode
+    {
+        Basic = 1,
+        Advanced = 2
     }
 }

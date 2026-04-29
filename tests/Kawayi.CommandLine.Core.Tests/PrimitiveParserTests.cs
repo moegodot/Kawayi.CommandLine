@@ -235,6 +235,54 @@ public sealed class PrimitiveParserTests
         await AssertParsingFinished(result, initialState);
     }
 
+    [Test]
+    public async Task EnumParser_Parses_Named_Value_Case_Insensitively()
+    {
+        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("advanced")];
+
+        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SampleMode), SampleMode.Basic);
+
+        await AssertParsingFinished(result, SampleMode.Advanced);
+    }
+
+    [Test]
+    public async Task EnumParser_Parses_Numeric_Underlying_Value()
+    {
+        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("2")];
+
+        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SampleMode), SampleMode.Basic);
+
+        await AssertParsingFinished(result, SampleMode.Advanced);
+    }
+
+    [Test]
+    public async Task EnumParser_Parses_Flags_Combinations()
+    {
+        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("Read, Write")];
+
+        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SamplePermissions), SamplePermissions.None);
+
+        await AssertParsingFinished(result, SamplePermissions.Read | SamplePermissions.Write);
+    }
+
+    [Test]
+    public async Task EnumParser_Returns_Initial_State_When_No_Arguments_Are_Provided()
+    {
+        var result = EnumParser.CreateParsing(DefaultOptions, [], typeof(SampleMode), SampleMode.Advanced);
+
+        await AssertParsingFinished(result, SampleMode.Advanced);
+    }
+
+    [Test]
+    public async Task EnumParser_Returns_InvalidArgument_For_Invalid_Enum_Input()
+    {
+        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways")];
+
+        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SampleMode), SampleMode.Basic);
+
+        await AssertInvalidArgument(result, "sideways", "SampleMode enum");
+    }
+
     private static async Task AssertParsingFinished<T>(ParsingResult result, T expected)
     {
         if (result is not ParsingFinished finished)
@@ -260,5 +308,20 @@ public sealed class PrimitiveParserTests
         await Assert.That(invalid.Argument).EqualTo(argument);
         await Assert.That(invalid.Expect).EqualTo(expect);
         await Assert.That(invalid.Exception).EqualTo(null);
+    }
+
+    private enum SampleMode
+    {
+        Basic = 1,
+        Advanced = 2
+    }
+
+    [Flags]
+    private enum SamplePermissions
+    {
+        None = 0,
+        Read = 1,
+        Write = 2,
+        Execute = 4
     }
 }

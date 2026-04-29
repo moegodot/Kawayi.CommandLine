@@ -12,4 +12,5 @@ public interface IParsingBuilder
     ImmutableDictionary<string,IParsingBuilder>.Builder Subcommands { get; }
     ImmutableDictionary<string,PropertyDefinition>.Builder Properties { get; }
     ImmutableList<ArgumentDefinition>.Builder Argument { get; }
+    ParsingInput Build();
 }

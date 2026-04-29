@@ -13,7 +13,7 @@ public sealed class BooleanParser : Abstractions.IParsable<bool>
                                               ImmutableArray<Token> arguments,
                                               bool initialState)
     {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].RawValue;
+        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
 
         if (arguments.IsDefaultOrEmpty)
         {
@@ -27,7 +27,7 @@ public sealed class BooleanParser : Abstractions.IParsable<bool>
 
         var token = arguments[^1];
 
-        if (bool.TryParse(token.RawValue, out var parsedValue))
+        if (bool.TryParse(token.Value, out var parsedValue))
         {
             return DebugOutput.Emit(options,
                                     new ParsingFinished<bool>(parsedValue),
@@ -39,7 +39,7 @@ public sealed class BooleanParser : Abstractions.IParsable<bool>
         }
 
         return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.RawValue, "bool", null),
+                                new InvalidArgumentDetected(token.Value, "bool", null),
                                 new DebugContext(nameof(BooleanParser),
                                                  Tokens: arguments,
                                                  TargetType: typeof(bool),

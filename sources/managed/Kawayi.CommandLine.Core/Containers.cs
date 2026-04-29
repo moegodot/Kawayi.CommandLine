@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core.Primitives;
@@ -12,6 +13,18 @@ namespace Kawayi.CommandLine.Core;
 public class Containers
     : Abstractions.IParsable<ContainerType>
 {
+    private static readonly MethodInfo BuildSequenceContainerRuntimeMethod = typeof(Containers)
+        .GetMethod(nameof(BuildSequenceContainerRuntime), BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException($"Method '{nameof(BuildSequenceContainerRuntime)}' was not found.");
+
+    private static readonly MethodInfo BuildDictionaryContainerForRuntimeKeyMethod = typeof(Containers)
+        .GetMethod(nameof(BuildDictionaryContainerForRuntimeKey), BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException($"Method '{nameof(BuildDictionaryContainerForRuntimeKey)}' was not found.");
+
+    private static readonly MethodInfo BuildDictionaryContainerForRuntimeValueMethod = typeof(Containers)
+        .GetMethod(nameof(BuildDictionaryContainerForRuntimeValue), BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException($"Method '{nameof(BuildDictionaryContainerForRuntimeValue)}' was not found.");
+
     public static IEscapeRule DefaultDictionaryEscapeRule { get; } = new SimpleEscapeRule(
         [new(@"\", @"\\"), new(@"=", @"\=")]);
 
@@ -50,7 +63,7 @@ public class Containers
 
         for (var index = 0; index < arguments.Length; index++)
         {
-            var result = ParseValue(options, arguments[index].RawValue, containerType.ValueType);
+            var result = ParseValue(options, arguments[index].Value, containerType.ValueType);
 
             if (result is not ParsingFinished finished)
             {
@@ -80,9 +93,9 @@ public class Containers
         {
             var token = arguments[index];
 
-            if (!TrySplitDictionaryEntry(token.RawValue, out var rawKey, out var rawValue))
+            if (!TrySplitDictionaryEntry(token.Value, out var rawKey, out var rawValue))
             {
-                return new InvalidArgumentDetected(token.RawValue, "key=value", null);
+                return new InvalidArgumentDetected(token.Value, "key=value", null);
             }
 
             var keyResult = ParseValue(options,
@@ -116,32 +129,107 @@ public class Containers
                                                         Type valueType,
                                                         object?[] parsedValues)
     {
-        try
+        if (valueType == typeof(bool))
         {
-            var typedArray = CreateTypedArray(valueType, parsedValues);
-
-            var result = genericDefinition == typeof(ImmutableArray<>)
-                ? InvokeGenericStaticMethod(typeof(ImmutableArray), nameof(ImmutableArray.CreateRange), [valueType], typedArray)
-                : genericDefinition == typeof(ImmutableList<>)
-                    ? InvokeGenericStaticMethod(typeof(ImmutableList), nameof(ImmutableList.CreateRange), [valueType], typedArray)
-                    : genericDefinition == typeof(ImmutableQueue<>)
-                        ? InvokeGenericStaticMethod(typeof(ImmutableQueue), nameof(ImmutableQueue.CreateRange), [valueType], typedArray)
-                        : genericDefinition == typeof(ImmutableStack<>)
-                            ? InvokeGenericStaticMethod(typeof(ImmutableStack), nameof(ImmutableStack.CreateRange), [valueType], typedArray)
-                            : genericDefinition == typeof(ImmutableSortedSet<>)
-                                ? InvokeGenericStaticMethod(typeof(ImmutableSortedSet), nameof(ImmutableSortedSet.CreateRange), [valueType], typedArray)
-                                : genericDefinition == typeof(ImmutableHashSet<>)
-                                    ? InvokeGenericStaticMethod(typeof(ImmutableHashSet), nameof(ImmutableHashSet.CreateRange), [valueType], typedArray)
-                                    : null;
-
-            return result is not null
-                ? new ParsingFinished<object>(result)
-                : CreateUnsupportedContainerResult(genericDefinition);
+            return BuildSequenceContainer<bool>(genericDefinition, parsedValues);
         }
-        catch (Exception exception)
+
+        if (valueType == typeof(byte))
         {
-            return new GotError(UnwrapInvocationException(exception));
+            return BuildSequenceContainer<byte>(genericDefinition, parsedValues);
         }
+
+        if (valueType == typeof(sbyte))
+        {
+            return BuildSequenceContainer<sbyte>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(ushort))
+        {
+            return BuildSequenceContainer<ushort>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(short))
+        {
+            return BuildSequenceContainer<short>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(uint))
+        {
+            return BuildSequenceContainer<uint>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(int))
+        {
+            return BuildSequenceContainer<int>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(ulong))
+        {
+            return BuildSequenceContainer<ulong>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(long))
+        {
+            return BuildSequenceContainer<long>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(float))
+        {
+            return BuildSequenceContainer<float>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(double))
+        {
+            return BuildSequenceContainer<double>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(decimal))
+        {
+            return BuildSequenceContainer<decimal>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(Guid))
+        {
+            return BuildSequenceContainer<Guid>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(string))
+        {
+            return BuildSequenceContainer<string>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(Uri))
+        {
+            return BuildSequenceContainer<Uri>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(DateTime))
+        {
+            return BuildSequenceContainer<DateTime>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(DateTimeOffset))
+        {
+            return BuildSequenceContainer<DateTimeOffset>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(DateOnly))
+        {
+            return BuildSequenceContainer<DateOnly>(genericDefinition, parsedValues);
+        }
+
+        if (valueType == typeof(TimeOnly))
+        {
+            return BuildSequenceContainer<TimeOnly>(genericDefinition, parsedValues);
+        }
+
+        if (valueType.IsEnum)
+        {
+            return BuildSequenceContainerForRuntimeType(genericDefinition, valueType, parsedValues);
+        }
+
+        return CreateUnsupportedContainerResult(genericDefinition);
     }
 
     private static ParsingResult BuildDictionaryContainer(Type genericDefinition,
@@ -149,34 +237,113 @@ public class Containers
                                                           Type valueType,
                                                           ParsedDictionaryEntry[] entries)
     {
-        try
+        if (keyType == typeof(bool))
         {
-            var typedArray = CreateTypedKeyValuePairArray(keyType, valueType, entries);
-            var closedContainerType = genericDefinition.MakeGenericType(keyType, valueType);
-            var emptyInstance = closedContainerType.GetField("Empty", BindingFlags.Public | BindingFlags.Static)
-                ?.GetValue(null);
-
-            if (emptyInstance is null)
-            {
-                throw new MissingFieldException(closedContainerType.FullName, "Empty");
-            }
-
-            var result = genericDefinition == typeof(ImmutableDictionary<,>)
-                         || genericDefinition == typeof(ImmutableSortedDictionary<,>)
-                ? InvokeInstanceMethod(emptyInstance, "SetItems", typedArray)
-                : null;
-
-            return result is not null
-                ? new ParsingFinished<object>(result)
-                : CreateUnsupportedContainerResult(genericDefinition);
+            return BuildDictionaryContainerForKey<bool>(genericDefinition, valueType, entries);
         }
-        catch (Exception exception)
+
+        if (keyType == typeof(byte))
         {
-            return new GotError(UnwrapInvocationException(exception));
+            return BuildDictionaryContainerForKey<byte>(genericDefinition, valueType, entries);
         }
+
+        if (keyType == typeof(sbyte))
+        {
+            return BuildDictionaryContainerForKey<sbyte>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(ushort))
+        {
+            return BuildDictionaryContainerForKey<ushort>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(short))
+        {
+            return BuildDictionaryContainerForKey<short>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(uint))
+        {
+            return BuildDictionaryContainerForKey<uint>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(int))
+        {
+            return BuildDictionaryContainerForKey<int>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(ulong))
+        {
+            return BuildDictionaryContainerForKey<ulong>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(long))
+        {
+            return BuildDictionaryContainerForKey<long>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(float))
+        {
+            return BuildDictionaryContainerForKey<float>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(double))
+        {
+            return BuildDictionaryContainerForKey<double>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(decimal))
+        {
+            return BuildDictionaryContainerForKey<decimal>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(Guid))
+        {
+            return BuildDictionaryContainerForKey<Guid>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(string))
+        {
+            return BuildDictionaryContainerForKey<string>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(Uri))
+        {
+            return BuildDictionaryContainerForKey<Uri>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(DateTime))
+        {
+            return BuildDictionaryContainerForKey<DateTime>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(DateTimeOffset))
+        {
+            return BuildDictionaryContainerForKey<DateTimeOffset>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(DateOnly))
+        {
+            return BuildDictionaryContainerForKey<DateOnly>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType == typeof(TimeOnly))
+        {
+            return BuildDictionaryContainerForKey<TimeOnly>(genericDefinition, valueType, entries);
+        }
+
+        if (keyType.IsEnum)
+        {
+            return BuildDictionaryContainerForRuntimeKeyType(genericDefinition, keyType, valueType, entries);
+        }
+
+        return CreateUnsupportedContainerResult(genericDefinition);
     }
 
-    private static ParsingResult ParseValue(ParsingOptions options, string rawValue, Type targetType)
+    private static ParsingResult ParseValue(ParsingOptions options,
+                                            string rawValue,
+                                            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+                                            Type targetType)
     {
         if (targetType == typeof(string))
         {
@@ -190,6 +357,11 @@ public class Containers
         }
 
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
+
+        if (targetType.IsEnum)
+        {
+            return EnumParser.CreateParsing(options, arguments, targetType, TypeDefaultValues.GetValue(targetType)!);
+        }
 
         if (targetType == typeof(bool))
         {
@@ -330,138 +502,286 @@ public class Containers
         return backslashCount % 2 == 1;
     }
 
-    private static Array CreateTypedArray(Type elementType, object?[] values)
+    private static ParsingResult BuildSequenceContainer<T>(Type genericDefinition, object?[] parsedValues)
     {
-        var array = Array.CreateInstance(elementType, values.Length);
-
-        for (var index = 0; index < values.Length; index++)
+        try
         {
-            array.SetValue(values[index], index);
-        }
+            var values = CastSequenceValues<T>(parsedValues);
 
-        return array;
+            object? result = genericDefinition == typeof(ImmutableArray<>)
+                ? ImmutableArray.CreateRange(values)
+                : genericDefinition == typeof(ImmutableList<>)
+                    ? ImmutableList.CreateRange(values)
+                    : genericDefinition == typeof(ImmutableQueue<>)
+                        ? ImmutableQueue.CreateRange(values)
+                        : genericDefinition == typeof(ImmutableStack<>)
+                            ? ImmutableStack.CreateRange(values)
+                            : genericDefinition == typeof(ImmutableSortedSet<>)
+                                ? ImmutableSortedSet.CreateRange(values)
+                                : genericDefinition == typeof(ImmutableHashSet<>)
+                                    ? ImmutableHashSet.CreateRange(values)
+                                    : null;
+
+            return result is not null
+                ? new ParsingFinished<object>(result)
+                : CreateUnsupportedContainerResult(genericDefinition);
+        }
+        catch (Exception exception)
+        {
+            return new GotError(UnwrapInvocationException(exception));
+        }
     }
 
-    private static Array CreateTypedKeyValuePairArray(Type keyType,
-                                                      Type valueType,
-                                                      ParsedDictionaryEntry[] entries)
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum container construction uses runtime generic instantiation for enum element types.")]
+    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum container construction uses runtime generic instantiation for enum element types.")]
+    private static ParsingResult BuildSequenceContainerForRuntimeType(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type genericDefinition,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type valueType,
+        object?[] parsedValues)
     {
-        var pairType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
-        var array = Array.CreateInstance(pairType, entries.Length);
+        try
+        {
+            return (ParsingResult)BuildSequenceContainerRuntimeMethod
+                .MakeGenericMethod(valueType)
+                .Invoke(null, [genericDefinition, parsedValues])!;
+        }
+        catch (Exception exception)
+        {
+            return new GotError(UnwrapInvocationException(exception));
+        }
+    }
+
+    private static ParsingResult BuildSequenceContainerRuntime<T>(Type genericDefinition, object?[] parsedValues)
+    {
+        return BuildSequenceContainer<T>(genericDefinition, parsedValues);
+    }
+
+    private static T[] CastSequenceValues<T>(object?[] parsedValues)
+    {
+        var values = new T[parsedValues.Length];
+
+        for (var index = 0; index < parsedValues.Length; index++)
+        {
+            values[index] = (T)parsedValues[index]!;
+        }
+
+        return values;
+    }
+
+    private static ParsingResult BuildDictionaryContainerForKey<TKey>(Type genericDefinition,
+                                                                      Type valueType,
+                                                                      ParsedDictionaryEntry[] entries)
+        where TKey : notnull
+    {
+        if (valueType == typeof(bool))
+        {
+            return BuildDictionaryContainer<TKey, bool>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(byte))
+        {
+            return BuildDictionaryContainer<TKey, byte>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(sbyte))
+        {
+            return BuildDictionaryContainer<TKey, sbyte>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(ushort))
+        {
+            return BuildDictionaryContainer<TKey, ushort>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(short))
+        {
+            return BuildDictionaryContainer<TKey, short>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(uint))
+        {
+            return BuildDictionaryContainer<TKey, uint>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(int))
+        {
+            return BuildDictionaryContainer<TKey, int>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(ulong))
+        {
+            return BuildDictionaryContainer<TKey, ulong>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(long))
+        {
+            return BuildDictionaryContainer<TKey, long>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(float))
+        {
+            return BuildDictionaryContainer<TKey, float>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(double))
+        {
+            return BuildDictionaryContainer<TKey, double>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(decimal))
+        {
+            return BuildDictionaryContainer<TKey, decimal>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(Guid))
+        {
+            return BuildDictionaryContainer<TKey, Guid>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(string))
+        {
+            return BuildDictionaryContainer<TKey, string>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(Uri))
+        {
+            return BuildDictionaryContainer<TKey, Uri>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(DateTime))
+        {
+            return BuildDictionaryContainer<TKey, DateTime>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(DateTimeOffset))
+        {
+            return BuildDictionaryContainer<TKey, DateTimeOffset>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(DateOnly))
+        {
+            return BuildDictionaryContainer<TKey, DateOnly>(genericDefinition, entries);
+        }
+
+        if (valueType == typeof(TimeOnly))
+        {
+            return BuildDictionaryContainer<TKey, TimeOnly>(genericDefinition, entries);
+        }
+
+        if (valueType.IsEnum)
+        {
+            return BuildDictionaryContainerForRuntimeValueType<TKey>(genericDefinition, valueType, entries);
+        }
+
+        return CreateUnsupportedContainerResult(genericDefinition);
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum dictionary construction uses runtime generic instantiation for enum key types.")]
+    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum dictionary construction uses runtime generic instantiation for enum key types.")]
+    private static ParsingResult BuildDictionaryContainerForRuntimeKeyType(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type genericDefinition,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type keyType,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type valueType,
+        ParsedDictionaryEntry[] entries)
+    {
+        try
+        {
+            return (ParsingResult)BuildDictionaryContainerForRuntimeKeyMethod
+                .MakeGenericMethod(keyType)
+                .Invoke(null, [genericDefinition, valueType, entries])!;
+        }
+        catch (Exception exception)
+        {
+            return new GotError(UnwrapInvocationException(exception));
+        }
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum dictionary construction uses runtime generic instantiation for enum value types.")]
+    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum dictionary construction uses runtime generic instantiation for enum value types.")]
+    private static ParsingResult BuildDictionaryContainerForRuntimeValueType<TKey>(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type genericDefinition,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type valueType,
+        ParsedDictionaryEntry[] entries)
+        where TKey : notnull
+    {
+        try
+        {
+            return (ParsingResult)BuildDictionaryContainerForRuntimeValueMethod
+                .MakeGenericMethod(typeof(TKey), valueType)
+                .Invoke(null, [genericDefinition, entries])!;
+        }
+        catch (Exception exception)
+        {
+            return new GotError(UnwrapInvocationException(exception));
+        }
+    }
+
+    private static ParsingResult BuildDictionaryContainerForRuntimeKey<TKey>(Type genericDefinition,
+                                                                             Type valueType,
+                                                                             ParsedDictionaryEntry[] entries)
+        where TKey : notnull
+    {
+        return BuildDictionaryContainerForKey<TKey>(genericDefinition, valueType, entries);
+    }
+
+    private static ParsingResult BuildDictionaryContainerForRuntimeValue<TKey, TValue>(Type genericDefinition,
+                                                                                       ParsedDictionaryEntry[] entries)
+        where TKey : notnull
+    {
+        return BuildDictionaryContainer<TKey, TValue>(genericDefinition, entries);
+    }
+
+    private static ParsingResult BuildDictionaryContainer<TKey, TValue>(Type genericDefinition,
+                                                                        ParsedDictionaryEntry[] entries)
+        where TKey : notnull
+    {
+        try
+        {
+            var values = CastDictionaryEntries<TKey, TValue>(entries);
+
+            if (genericDefinition == typeof(ImmutableDictionary<,>))
+            {
+                var dictionary = ImmutableDictionary<TKey, TValue>.Empty;
+
+                foreach (var (key, value) in values)
+                {
+                    dictionary = dictionary.SetItem(key, value);
+                }
+
+                return new ParsingFinished<object>(dictionary);
+            }
+
+            if (genericDefinition == typeof(ImmutableSortedDictionary<,>))
+            {
+                var dictionary = ImmutableSortedDictionary<TKey, TValue>.Empty;
+
+                foreach (var (key, value) in values)
+                {
+                    dictionary = dictionary.SetItem(key, value);
+                }
+
+                return new ParsingFinished<object>(dictionary);
+            }
+
+            return CreateUnsupportedContainerResult(genericDefinition);
+        }
+        catch (Exception exception)
+        {
+            return new GotError(UnwrapInvocationException(exception));
+        }
+    }
+
+    private static KeyValuePair<TKey, TValue>[] CastDictionaryEntries<TKey, TValue>(ParsedDictionaryEntry[] entries)
+        where TKey : notnull
+    {
+        var values = new KeyValuePair<TKey, TValue>[entries.Length];
 
         for (var index = 0; index < entries.Length; index++)
         {
-            array.SetValue(Activator.CreateInstance(pairType, entries[index].Key, entries[index].Value), index);
+            values[index] = new KeyValuePair<TKey, TValue>((TKey)entries[index].Key!, (TValue)entries[index].Value!);
         }
 
-        return array;
-    }
-
-    private static object InvokeGenericStaticMethod(Type declaringType,
-                                                    string methodName,
-                                                    Type[] genericArguments,
-                                                    params object?[] arguments)
-    {
-        foreach (var candidate in declaringType
-                     .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                     .Where(static method => method.IsGenericMethodDefinition))
-        {
-            if (candidate.Name != methodName ||
-                candidate.GetGenericArguments().Length != genericArguments.Length ||
-                candidate.GetParameters().Length != arguments.Length)
-            {
-                continue;
-            }
-
-            var closedMethod = candidate.MakeGenericMethod(genericArguments);
-            var parameters = closedMethod.GetParameters();
-
-            var matches = true;
-
-            for (var index = 0; index < parameters.Length; index++)
-            {
-                var argument = arguments[index];
-
-                if (argument is null)
-                {
-                    if (parameters[index].ParameterType.IsValueType &&
-                        Nullable.GetUnderlyingType(parameters[index].ParameterType) is null)
-                    {
-                        matches = false;
-                        break;
-                    }
-
-                    continue;
-                }
-
-                if (!parameters[index].ParameterType.IsInstanceOfType(argument))
-                {
-                    matches = false;
-                    break;
-                }
-            }
-
-            if (matches)
-            {
-                return closedMethod.Invoke(null, arguments)
-                    ?? throw new InvalidOperationException(
-                        $"Method '{declaringType.FullName}.{methodName}' returned null.");
-            }
-        }
-
-        throw new MissingMethodException(
-            $"Unable to resolve '{declaringType.FullName}.{methodName}' for {string.Join(", ", genericArguments.Select(static type => type.FullName))}.");
-    }
-
-    private static object InvokeInstanceMethod(object instance,
-                                               string methodName,
-                                               params object?[] arguments)
-    {
-        var declaringType = instance.GetType();
-
-        foreach (var candidate in declaringType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (candidate.Name != methodName || candidate.GetParameters().Length != arguments.Length)
-            {
-                continue;
-            }
-
-            var parameters = candidate.GetParameters();
-            var matches = true;
-
-            for (var index = 0; index < parameters.Length; index++)
-            {
-                var argument = arguments[index];
-
-                if (argument is null)
-                {
-                    if (parameters[index].ParameterType.IsValueType &&
-                        Nullable.GetUnderlyingType(parameters[index].ParameterType) is null)
-                    {
-                        matches = false;
-                        break;
-                    }
-
-                    continue;
-                }
-
-                if (!parameters[index].ParameterType.IsInstanceOfType(argument))
-                {
-                    matches = false;
-                    break;
-                }
-            }
-
-            if (matches)
-            {
-                return candidate.Invoke(instance, arguments)
-                    ?? throw new InvalidOperationException(
-                        $"Method '{declaringType.FullName}.{methodName}' returned null.");
-            }
-        }
-
-        throw new MissingMethodException(
-            $"Unable to resolve instance method '{declaringType.FullName}.{methodName}'.");
+        return values;
     }
 
     private static ParsingResult CreateUnsupportedContainerResult(Type containerType)

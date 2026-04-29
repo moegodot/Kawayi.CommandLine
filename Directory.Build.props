@@ -72,6 +72,12 @@
   <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
+
+    <EnableAotTestExecution Condition="'$(EnableAotTestExecution)' == ''">false</EnableAotTestExecution>
+    <AotTestRuntimeIdentifier Condition="'$(AotTestRuntimeIdentifier)' == '' and '$(NETCoreSdkRuntimeIdentifier)' != ''">$(NETCoreSdkRuntimeIdentifier)</AotTestRuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(EnableAotTestExecution)' == 'true' and '$(RuntimeIdentifier)' == '' and '$(AotTestRuntimeIdentifier)' != ''">$(AotTestRuntimeIdentifier)</RuntimeIdentifier>
+    <SelfContained Condition="'$(EnableAotTestExecution)' == 'true'">true</SelfContained>
+    <PublishAot Condition="'$(EnableAotTestExecution)' == 'true'">true</PublishAot>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsAnalyzerProject)' == 'true' OR '$(IsGeneratorProject)' == 'true'">

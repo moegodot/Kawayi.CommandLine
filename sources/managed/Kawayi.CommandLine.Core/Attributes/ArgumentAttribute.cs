@@ -6,7 +6,13 @@ namespace Kawayi.CommandLine.Core.Attributes;
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class ArgumentAttribute: SymbolAttribute
 {
-    public ArgumentAttribute(bool visible, bool require) : base(visible, require)
+    /// <summary>
+    /// mark the position of the argument in the class
+    /// </summary>
+    public int Position { get; }
+
+    public ArgumentAttribute(int position, bool require = false,bool visible = true) : base(require,visible)
     {
+        Position = position;
     }
 }

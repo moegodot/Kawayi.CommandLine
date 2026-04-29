@@ -3,7 +3,7 @@
 
 namespace Kawayi.CommandLine.Abstractions;
 
-public record Color(byte R, byte G, byte B, byte A)
+public readonly record struct Color(byte R, byte G, byte B, byte A)
 {
     public static Color None { get; } = new(0, 0, 0, 0);
     public static Color White { get; } = new(255, 255, 255, 255);

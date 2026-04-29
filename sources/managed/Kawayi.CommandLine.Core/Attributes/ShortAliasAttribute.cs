@@ -4,12 +4,9 @@
 namespace Kawayi.CommandLine.Core.Attributes;
 
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
-public sealed class ShortAliasAttribute : Attribute
+public sealed class ShortAliasAttribute : AliasAttribute
 {
-    public string Alias { get; }
-
-    public ShortAliasAttribute(string alias)
+    public ShortAliasAttribute(string alias,bool visible = true) : base(alias,visible)
     {
-        Alias = alias;
     }
 }

@@ -4,12 +4,15 @@
 namespace Kawayi.CommandLine.Core.Attributes;
 
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
-public sealed class AliasAttribute : Attribute
+public class AliasAttribute : Attribute
 {
-    public AliasAttribute(string alias)
+    public AliasAttribute(string alias, bool visible = true)
     {
         Alias = alias;
+        Visible = visible;
     }
 
     public string Alias { get; }
+
+    public bool Visible { get; }
 }

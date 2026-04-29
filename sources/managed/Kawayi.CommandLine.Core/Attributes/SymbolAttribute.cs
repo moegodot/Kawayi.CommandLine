@@ -7,7 +7,7 @@ namespace Kawayi.CommandLine.Core.Attributes;
 
 public abstract class SymbolAttribute : Attribute
 {
-    public SymbolAttribute(bool visible,bool require)
+    public SymbolAttribute(bool require = false,bool visible = true)
     {
         Visible = visible;
         Require = require;

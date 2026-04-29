@@ -24,6 +24,7 @@
     <File Path=".codex/agents/reviewer.toml" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/Kawayi.CommandLine.Sample/Kawayi.CommandLine.Sample.csproj" />
   </Folder>
   <Folder Name="/sources/" />
   <Folder Name="/sources/managed/">

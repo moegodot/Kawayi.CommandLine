@@ -27,7 +27,7 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor NonPartialDiagnostic = new(
         id: "KCLG001",
         title: "ExportDocument target must be partial",
-        messageFormat: "类型 '{0}' 需要声明为 partial 才能生成 IDocumentExporter 实现。",
+        messageFormat: "Type '{0}' must be declared partial to generate an IDocumentExporter implementation",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

@@ -26,8 +26,9 @@ internal static class DebugOutput
     private static string Render(ParsingOptions options, ParsingResult result, DebugContext? context)
     {
         var text = new StyledStringBuilder(options.EnableStyle);
+        var styleTable = options.StyleTable;
 
-        text.AppendLine(options.DebugTitleStyle, "Debug Parse Result");
+        text.AppendLine(styleTable.DebugTitleStyle, "Debug Parse Result");
         AppendKeyValue(text, options, "Source", context?.Source ?? "Unknown");
         AppendKeyValue(text, options, "Result", result.GetType().Name);
         AppendState(text, options, result);
@@ -129,12 +130,12 @@ internal static class DebugOutput
     {
         var (label, style) = result switch
         {
-            Subcommand => ("deferred", options.DebugDeferredStyle),
-            ShouldExit { Success: false } => ("failure", options.DebugFailureStyle),
-            _ => ("success", options.DebugSuccessStyle)
+            Subcommand => ("deferred", options.StyleTable.DebugDeferredStyle),
+            ShouldExit { Success: false } => ("failure", options.StyleTable.DebugFailureStyle),
+            _ => ("success", options.StyleTable.DebugSuccessStyle)
         };
 
-        text.Append(options.DebugLabelStyle, "State")
+        text.Append(options.StyleTable.DebugLabelStyle, "State")
             .Append(": ")
             .AppendLine(style, label);
     }
@@ -144,9 +145,9 @@ internal static class DebugOutput
                                      string label,
                                      ImmutableArray<Token> tokens)
     {
-        text.Append(options.DebugLabelStyle, label)
+        text.Append(options.StyleTable.DebugLabelStyle, label)
             .Append(": ")
-            .AppendLine(options.DebugTokenStyle, tokens.Length == 0
+            .AppendLine(options.StyleTable.DebugTokenStyle, tokens.Length == 0
                 ? "<empty>"
                 : string.Join(" ", tokens.Select(FormatToken)));
     }
@@ -156,9 +157,9 @@ internal static class DebugOutput
                                          string label,
                                          Token token)
     {
-        text.Append(options.DebugLabelStyle, label)
+        text.Append(options.StyleTable.DebugLabelStyle, label)
             .Append(": ")
-            .AppendLine(options.DebugTokenStyle, FormatToken(token));
+            .AppendLine(options.StyleTable.DebugTokenStyle, FormatToken(token));
     }
 
     private static void AppendKeyValue(StyledStringBuilder text,
@@ -166,18 +167,18 @@ internal static class DebugOutput
                                        string label,
                                        string value)
     {
-        text.Append(options.DebugLabelStyle, label)
+        text.Append(options.StyleTable.DebugLabelStyle, label)
             .Append(": ")
-            .AppendLine(options.DebugValueStyle, value);
+            .AppendLine(options.StyleTable.DebugValueStyle, value);
     }
 
     private static string FormatToken(Token token)
     {
         return token switch
         {
-            ShortOptionToken shortOption => $"-{shortOption.RawValue}",
-            LongOptionToken longOption => $"--{longOption.RawValue}",
-            _ => token.RawValue
+            ShortOptionToken shortOption => $"-{shortOption.Value}",
+            LongOptionToken longOption => $"--{longOption.Value}",
+            _ => token.Value
         };
     }
 
@@ -193,9 +194,20 @@ internal static class DebugOutput
 
         if (value is IParsingResultCollection collection)
         {
-            var commandSummary = collection.Commands.Count == 0
-                ? "none"
-                : string.Join(", ", collection.Commands.Keys.OrderBy(static key => key, StringComparer.Ordinal));
+            var commands = new Stack<string>();
+            IParsingResultCollection? current = collection;
+
+            while (current is not null)
+            {
+                if (current.Command is not null)
+                {
+                    commands.Push(current.Command.Information.Name.Value);
+                }
+
+                current = current.Parent;
+            }
+
+            var commandSummary = commands.Count == 0 ? "none" : string.Join(", ", commands);
             description = $"commands={commandSummary}";
             return true;
         }

@@ -1,15 +1,22 @@
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Kawayi.CommandLine.Abstractions;
 
+/// <summary>
+/// Defines a subcommand entry in the command schema.
+/// </summary>
 public sealed record CommandDefinition(DefinitionInformation Information,
+                                       ImmutableDictionary<string, NameWithVisibility> Alias,
                                        CommandDefinition? ParentCommand)
     : Symbol(Information,ParentCommand);
 
 public abstract record TypedDefinition(
     DefinitionInformation Information,
     Symbol? ParentSymbol,
+    [property: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+    [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type Type,
     bool Requirement) : Symbol(Information, ParentSymbol)
 {
@@ -29,7 +36,8 @@ public abstract record TypedDefinition(
 public sealed record ArgumentDefinition(
     DefinitionInformation Information,
     Symbol? ParentSymbol,
-    ArgumentArity Arity,
+    ValueRange ValueRange,
+    [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type Type,
     bool Requirement) : TypedDefinition(Information, ParentSymbol, Type, Requirement)
 {
@@ -39,7 +47,7 @@ public sealed record ArgumentDefinition(
     /// from left to right while reserving enough values to satisfy later arguments'
     /// minimum arity requirements.
     /// </summary>
-    public ArgumentArity Arity { get; init; } = Arity;
+    public ValueRange ValueRange { get; init; } = ValueRange;
 }
 
 public sealed record PropertyDefinition(
@@ -47,9 +55,14 @@ public sealed record PropertyDefinition(
     ImmutableDictionary<string, NameWithVisibility> LongName,
     ImmutableDictionary<string, NameWithVisibility> ShortName,
     Symbol? ParentSymbol,
+    [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type Type,
     bool Requirement)
     : TypedDefinition(Information, ParentSymbol, Type, Requirement)
 {
+    public ValueRange NumArgs { get; init; } = ValueRange.ZeroOrMore;
+
+    public string? ValueName { get; init; }
+
     public PossibleValues? PossibleValues { get; init; }
 }

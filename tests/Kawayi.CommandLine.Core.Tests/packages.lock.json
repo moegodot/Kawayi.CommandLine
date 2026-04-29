@@ -160,6 +160,12 @@
           "Kawayi.Escapes": "[1.0.0, )"
         }
       },
+      "kawayi.commandline.extensions": {
+        "type": "Project",
+        "dependencies": {
+          "Kawayi.CommandLine.Core": "[1.0.0, )"
+        }
+      },
       "kawayi.escapes": {
         "type": "Project"
       }
