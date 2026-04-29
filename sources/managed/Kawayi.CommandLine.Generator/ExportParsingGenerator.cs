@@ -243,6 +243,11 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
             true);
         var selfTypeReference = BuildSelfTypeReference(target.TypeSymbol);
 
+        AppendIndentedLine(builder, indentLevel, "/// <summary>");
+        AppendIndentedLine(builder, indentLevel, "/// Exports a mutable parsing builder for this command type.");
+        AppendIndentedLine(builder, indentLevel, "/// </summary>");
+        AppendIndentedLine(builder, indentLevel, "/// <param name=\"parsingOptions\">The parsing options to attach to the exported builder.</param>");
+        AppendIndentedLine(builder, indentLevel, "/// <returns>The exported parsing builder.</returns>");
         AppendIndentedLine(
             builder,
             indentLevel,
@@ -283,6 +288,13 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         AppendIndentedLine(builder, indentLevel + 1, "return builder;");
         AppendIndentedLine(builder, indentLevel, "}");
         AppendIndentedLine(builder, indentLevel, string.Empty);
+        AppendIndentedLine(builder, indentLevel, "/// <summary>");
+        AppendIndentedLine(builder, indentLevel, "/// Parses the supplied tokens by using the generated schema for this command type.");
+        AppendIndentedLine(builder, indentLevel, "/// </summary>");
+        AppendIndentedLine(builder, indentLevel, "/// <param name=\"options\">The parsing options for this operation.</param>");
+        AppendIndentedLine(builder, indentLevel, "/// <param name=\"arguments\">The tokens to parse.</param>");
+        AppendIndentedLine(builder, indentLevel, "/// <param name=\"initialState\">The initial state supplied to satisfy the IParsable contract.</param>");
+        AppendIndentedLine(builder, indentLevel, "/// <returns>The parsing result.</returns>");
         AppendIndentedLine(
             builder,
             indentLevel,

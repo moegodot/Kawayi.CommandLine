@@ -6,10 +6,19 @@ using System.Text;
 
 namespace Kawayi.Escapes;
 
+/// <summary>
+/// Applies exact string replacements to escape and unescape text.
+/// </summary>
+/// <param name="RuleSet">The mapping from raw substrings to escaped substrings.</param>
 public sealed record SimpleEscapeRule(ImmutableDictionary<string, string> RuleSet) : IEscapeRule
 {
     private readonly PreparedRules preparedRules = PreparedRules.Create(RuleSet);
 
+    /// <summary>
+    /// Escapes the supplied text by applying the configured rule set.
+    /// </summary>
+    /// <param name="original">The raw text to escape.</param>
+    /// <returns>The escaped text.</returns>
     public string Escape(string original)
     {
         ArgumentNullException.ThrowIfNull(original);
@@ -37,6 +46,11 @@ public sealed record SimpleEscapeRule(ImmutableDictionary<string, string> RuleSe
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Unescapes the supplied text by reversing the configured rule set.
+    /// </summary>
+    /// <param name="escaped">The escaped text to unescape.</param>
+    /// <returns>The unescaped text.</returns>
     public string Unescape(string escaped)
     {
         ArgumentNullException.ThrowIfNull(escaped);

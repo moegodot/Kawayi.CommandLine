@@ -10,6 +10,9 @@ using Kawayi.Escapes;
 
 namespace Kawayi.CommandLine.Core;
 
+/// <summary>
+/// Parses supported collection and dictionary container types from command-line tokens.
+/// </summary>
 public class Containers
     : Abstractions.IParsable<ContainerType>
 {
@@ -25,9 +28,19 @@ public class Containers
         .GetMethod(nameof(BuildDictionaryContainerForRuntimeValue), BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"Method '{nameof(BuildDictionaryContainerForRuntimeValue)}' was not found.");
 
+    /// <summary>
+    /// Gets the default escaping rule used for dictionary entries encoded as <c>key=value</c>.
+    /// </summary>
     public static IEscapeRule DefaultDictionaryEscapeRule { get; } = new SimpleEscapeRule(
         [new(@"\", @"\\"), new(@"=", @"\=")]);
 
+    /// <summary>
+    /// Parses a supported container value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The container type descriptor to populate.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options,
                                               ImmutableArray<Token> arguments,
                                               ContainerType initialState)

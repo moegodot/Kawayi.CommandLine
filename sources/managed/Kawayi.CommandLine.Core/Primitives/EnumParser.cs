@@ -6,8 +6,19 @@ using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
+/// <summary>
+/// Parses enumeration values when the target enum type is only known at runtime.
+/// </summary>
 public sealed class EnumParser
 {
+    /// <summary>
+    /// Parses an enum value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="enumType">The enum type to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options,
                                               ImmutableArray<Token> arguments,
                                               Type enumType,

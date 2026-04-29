@@ -247,6 +247,9 @@ public sealed partial class ExportDocumentGenerator : IIncrementalGenerator
 
     private static void AppendDocumentsProperty(StringBuilder builder, ExportTarget target, int indentLevel)
     {
+        AppendIndentedLine(builder, indentLevel, "/// <summary>");
+        AppendIndentedLine(builder, indentLevel, "/// Gets the generated documentation entries for this command type.");
+        AppendIndentedLine(builder, indentLevel, "/// </summary>");
         const string propertyHeader =
             "public static global::System.Collections.Immutable.ImmutableDictionary<string, global::Kawayi.CommandLine.Abstractions.Document> Documents { get; } = ";
 

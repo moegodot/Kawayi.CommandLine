@@ -5,6 +5,9 @@ using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Core.Attributes;
 
+/// <summary>
+/// Declares the accepted value-count range for an argument or property.
+/// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
 public sealed class ValueRangeAttribute : Attribute
 {
@@ -16,6 +19,8 @@ public sealed class ValueRangeAttribute : Attribute
     /// <summary>
     /// Marks the minimum and maximum number of values a member can receive.
     /// </summary>
+    /// <param name="minimum">The minimum number of values.</param>
+    /// <param name="maximum">The maximum number of values.</param>
     public ValueRangeAttribute(int minimum, int maximum)
     {
         ValueRange = new ValueRange(minimum, maximum);

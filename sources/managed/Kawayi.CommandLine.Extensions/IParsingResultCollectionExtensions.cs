@@ -5,6 +5,9 @@ using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Extensions;
 
+/// <summary>
+/// Adds convenience helpers for working with parsed command result trees.
+/// </summary>
 public static class IParsingResultCollectionExtensions
 {
     extension(IParsingResultCollection collection)
@@ -12,6 +15,7 @@ public static class IParsingResultCollectionExtensions
         /// <summary>
         /// Creates a new bindable command object and populates it from the parsing result collection.
         /// </summary>
+        /// <returns>The populated command object.</returns>
         public T Bind<T>()
             where T : IBindable, new()
         {

@@ -5,7 +5,13 @@ using System.Collections.Immutable;
 
 namespace Kawayi.CommandLine.Abstractions;
 
+/// <summary>
+/// Exposes generated documentation metadata for a command type.
+/// </summary>
 public interface IDocumentExporter
 {
+    /// <summary>
+    /// Gets the documentation entries keyed by member name.
+    /// </summary>
     static abstract ImmutableDictionary<string, Document> Documents { get; }
 }

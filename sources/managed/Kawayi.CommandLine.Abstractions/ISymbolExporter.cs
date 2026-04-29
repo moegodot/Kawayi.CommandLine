@@ -5,7 +5,13 @@ using System.Collections.Immutable;
 
 namespace Kawayi.CommandLine.Abstractions;
 
+/// <summary>
+/// Exposes generated symbol definitions for a command type.
+/// </summary>
 public interface ISymbolExporter
 {
+    /// <summary>
+    /// Gets the exported symbols declared by the command type.
+    /// </summary>
     static abstract ImmutableArray<Symbol> Symbols { get; }
 }

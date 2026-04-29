@@ -712,6 +712,9 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
 
     private static void AppendSymbolsProperty(StringBuilder builder, ExportTarget target, int indentLevel)
     {
+        AppendIndentedLine(builder, indentLevel, "/// <summary>");
+        AppendIndentedLine(builder, indentLevel, "/// Gets the generated command-line symbol definitions for this command type.");
+        AppendIndentedLine(builder, indentLevel, "/// </summary>");
         const string propertyHeader =
             "public static global::System.Collections.Immutable.ImmutableArray<global::Kawayi.CommandLine.Abstractions.Symbol> Symbols { get; } = ";
 

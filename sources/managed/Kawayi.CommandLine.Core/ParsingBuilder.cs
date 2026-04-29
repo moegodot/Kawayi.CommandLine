@@ -12,6 +12,14 @@ namespace Kawayi.CommandLine.Core;
 /// </summary>
 public sealed class ParsingBuilder : IParsingBuilder
 {
+    /// <summary>
+    /// Initializes a new mutable parsing builder.
+    /// </summary>
+    /// <param name="parsingOptions">The parsing options attached to the builder.</param>
+    /// <param name="subcommandDefinitions">The initial subcommand definitions.</param>
+    /// <param name="properties">The initial property definitions.</param>
+    /// <param name="argument">The initial positional argument definitions.</param>
+    /// <param name="subcommands">The initial child parsing builders.</param>
     public ParsingBuilder(ParsingOptions parsingOptions,
                           ImmutableDictionary<string, CommandDefinition>? subcommandDefinitions = null,
                           ImmutableDictionary<string, PropertyDefinition>? properties = null,
@@ -65,12 +73,25 @@ public sealed class ParsingBuilder : IParsingBuilder
             argument);
     }
 
+    /// <summary>
+    /// Produces an immutable parsing snapshot from the current builder state.
+    /// </summary>
+    /// <returns>The immutable parsing snapshot.</returns>
     public ParsingInput Build() => CreateInput(this);
 
+    /// <inheritdoc />
     public ParsingOptions ParsingOptions { get; }
+
+    /// <inheritdoc />
     public ImmutableDictionary<string, CommandDefinition>.Builder SubcommandDefinitions { get; }
+
+    /// <inheritdoc />
     public ImmutableDictionary<string, PropertyDefinition>.Builder Properties { get; }
+
+    /// <inheritdoc />
     public ImmutableList<ArgumentDefinition>.Builder Argument { get; }
+
+    /// <inheritdoc />
     public ImmutableDictionary<string, IParsingBuilder>.Builder Subcommands { get; }
 
     private static ImmutableDictionary<string, T>.Builder CreateBuilder<T>(ImmutableDictionary<string, T>? source)

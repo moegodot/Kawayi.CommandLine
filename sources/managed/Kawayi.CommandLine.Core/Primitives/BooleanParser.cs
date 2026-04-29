@@ -7,8 +7,18 @@ using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
+/// <summary>
+/// Parses boolean values from command-line tokens.
+/// </summary>
 public sealed class BooleanParser : Abstractions.IParsable<bool>
 {
+    /// <summary>
+    /// Parses a boolean value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options,
                                               ImmutableArray<Token> arguments,
                                               bool initialState)

@@ -6,8 +6,16 @@ using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Core;
 
+/// <summary>
+/// Tokenizes raw command-line arguments into typed token objects.
+/// </summary>
 public sealed class Tokenizer : ITokenizer
 {
+    /// <summary>
+    /// Tokenizes the supplied command-line inputs.
+    /// </summary>
+    /// <param name="inputs">The raw command-line inputs.</param>
+    /// <returns>The tokenized inputs.</returns>
     public ImmutableArray<Token> Tokenlize(ImmutableArray<string> inputs)
     {
         var builder = ImmutableArray.CreateBuilder<Token>(inputs.Length);

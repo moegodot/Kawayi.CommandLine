@@ -3,6 +3,9 @@
 
 namespace Kawayi.CommandLine.Core.Attributes;
 
+/// <summary>
+/// Requests generation of symbol export members for the target type.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class ExportSymbolsAttribute : Attribute
 {

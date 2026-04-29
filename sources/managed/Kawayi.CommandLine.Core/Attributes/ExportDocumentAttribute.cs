@@ -3,6 +3,9 @@
 
 namespace Kawayi.CommandLine.Core.Attributes;
 
+/// <summary>
+/// Requests generation of <c>IDocumentExporter</c> members for the target type.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class ExportDocumentAttribute : Attribute
 {

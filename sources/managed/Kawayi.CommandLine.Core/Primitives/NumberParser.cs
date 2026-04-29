@@ -8,6 +8,9 @@ using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
+/// <summary>
+/// Parses integral numeric types from command-line tokens.
+/// </summary>
 public sealed class NumberParser
     : Abstractions.IParsable<byte>,
       Abstractions.IParsable<sbyte>,
@@ -18,9 +21,19 @@ public sealed class NumberParser
       Abstractions.IParsable<long>,
       Abstractions.IParsable<ulong>
 {
+    /// <summary>
+    /// Gets the default number styles used for integral parsing.
+    /// </summary>
     public static NumberStyles DefaultNumberStyles { get; }
         = NumberStyles.Integer;
 
+    /// <summary>
+    /// Parses a <see cref="byte"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options,
                                               ImmutableArray<Token> arguments,
                                               byte initialState) =>
@@ -31,6 +44,13 @@ public sealed class NumberParser
               static (string value, out byte result) =>
                   byte.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses an <see cref="sbyte"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, sbyte initialState) =>
         Parse(options,
               arguments,
@@ -39,6 +59,13 @@ public sealed class NumberParser
               static (string value, out sbyte result) =>
                   sbyte.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses a <see cref="ushort"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, ushort initialState) =>
         Parse(options,
               arguments,
@@ -47,6 +74,13 @@ public sealed class NumberParser
               static (string value, out ushort result) =>
                   ushort.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses a <see cref="short"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, short initialState) =>
         Parse(options,
               arguments,
@@ -55,6 +89,13 @@ public sealed class NumberParser
               static (string value, out short result) =>
                   short.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses an <see cref="int"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, int initialState) =>
         Parse(options,
               arguments,
@@ -63,6 +104,13 @@ public sealed class NumberParser
               static (string value, out int result) =>
                   int.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses a <see cref="uint"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, uint initialState) =>
         Parse(options,
               arguments,
@@ -71,6 +119,13 @@ public sealed class NumberParser
               static (string value, out uint result) =>
                   uint.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses a <see cref="long"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, long initialState) =>
         Parse(options,
               arguments,
@@ -79,6 +134,13 @@ public sealed class NumberParser
               static (string value, out long result) =>
                   long.TryParse(value, DefaultNumberStyles, null, out result));
 
+    /// <summary>
+    /// Parses a <see cref="ulong"/> value from the supplied tokens.
+    /// </summary>
+    /// <param name="options">The parsing options for this operation.</param>
+    /// <param name="arguments">The tokens to parse.</param>
+    /// <param name="initialState">The fallback value used when no token is supplied.</param>
+    /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, ulong initialState) =>
         Parse(options,
               arguments,
