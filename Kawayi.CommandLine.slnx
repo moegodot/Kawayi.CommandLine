@@ -30,10 +30,11 @@
   <Folder Name="/sources/managed/">
     <Project Path="sources/managed/Kawayi.CommandLine.Abstractions/Kawayi.CommandLine.Abstractions.csproj" />
     <Project Path="sources/managed/Kawayi.CommandLine.Core/Kawayi.CommandLine.Core.csproj" />
-    <Project Path="sources/managed/Kawayi.CommandLine.ExitCodes/Kawayi.CommandLine.ExitCodes.csproj" />
     <Project Path="sources/managed/Kawayi.CommandLine.Extensions/Kawayi.CommandLine.Extensions.csproj" />
     <Project Path="sources/managed/Kawayi.CommandLine.Generator/Kawayi.CommandLine.Generator.csproj" />
+    <Project Path="sources/managed/Kawayi.CommandLine/Kawayi.CommandLine.csproj" />
     <Project Path="sources/managed/Kawayi.Escapes/Kawayi.Escapes.csproj" />
+    <Project Path="sources\managed\Kawayi.ExitCodes\Kawayi.ExitCodes.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Kawayi.CommandLine.Core.Tests/Kawayi.CommandLine.Core.Tests.csproj" />

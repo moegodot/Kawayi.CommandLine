@@ -32,5 +32,5 @@ public interface IParsingResultCollection
     /// <summary>
     /// Gets the schema metadata for the current scope only.
     /// </summary>
-    IParsingScopeMetadata Scope { get; }
+    ParsingScopeMetadata Scope { get; }
 }

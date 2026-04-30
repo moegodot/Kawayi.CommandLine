@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\sources\managed\Kawayi.CommandLine.ExitCodes\Kawayi.CommandLine.ExitCodes.csproj" />
+    <ProjectReference Include="..\..\sources\managed\Kawayi.ExitCodes\Kawayi.ExitCodes.csproj" />
   </ItemGroup>
 
 </Project>

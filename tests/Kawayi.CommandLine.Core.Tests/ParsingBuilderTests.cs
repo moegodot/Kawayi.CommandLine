@@ -1037,7 +1037,7 @@ public sealed class ParsingBuilderTests
         };
         var clrDefaultProperty = CreateProperty("plain", typeof(bool));
         var command = CreateCommand("serve");
-        var scope = new TestScopeMetadata([command], [explicitProperty, defaultedProperty, clrDefaultProperty]);
+        var scope = new ParsingScopeMetadata([command], [explicitProperty, defaultedProperty, clrDefaultProperty]);
         var collection = new ParsingResultCollection(
             null,
             null,
@@ -1956,10 +1956,6 @@ public sealed class ParsingBuilderTests
 
         field.SetValue(null, null);
     }
-
-    private sealed record TestScopeMetadata(ImmutableArray<CommandDefinition> AvailableSubcommands,
-                                            ImmutableArray<TypedDefinition> AvailableTypedDefinitions)
-        : IParsingScopeMetadata;
 
     private enum SampleMode
     {

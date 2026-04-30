@@ -25,5 +25,19 @@ public static class IParsingResultCollectionExtensions
             result.Bind(collection);
             return result;
         }
+
+        /// <summary>
+        /// get the root command of a subcommand's <see cref="IParsingResultCollection"/>
+        /// </summary>
+        /// <returns>the <see cref="IParsingResultCollection"/> that <see cref="IParsingResultCollection.Parent"/> is <see langword="null"/></returns>
+        public IParsingResultCollection GetRootCommand()
+        {
+            while (collection.Parent != null)
+            {
+                collection = collection.Parent;
+            }
+
+            return collection;
+        }
     }
 }

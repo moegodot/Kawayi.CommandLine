@@ -147,7 +147,7 @@
           "TUnit.Core": "1.28.0"
         }
       },
-      "kawayi.commandline.exitcodes": {
+      "kawayi.exitcodes": {
         "type": "Project"
       }
     }

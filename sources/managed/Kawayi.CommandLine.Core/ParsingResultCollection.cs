@@ -19,7 +19,7 @@ public sealed class ParsingResultCollection : IParsingResultCollection
     /// </summary>
     public ParsingResultCollection(CommandDefinition? command,
                                    IParsingResultCollection? parent,
-                                   IParsingScopeMetadata scope,
+                                   ParsingScopeMetadata scope,
                                    ImmutableDictionary<TypedDefinition, object?>? values = null,
                                    ImmutableDictionary<CommandDefinition, IParsingResultCollection>? subcommands = null)
     {
@@ -38,7 +38,7 @@ public sealed class ParsingResultCollection : IParsingResultCollection
     public IParsingResultCollection? Parent { get; }
 
     /// <inheritdoc />
-    public IParsingScopeMetadata Scope { get; }
+    public ParsingScopeMetadata Scope { get; }
 
     /// <inheritdoc />
     public bool TryGetValue(TypedDefinition definition, out object? value)
