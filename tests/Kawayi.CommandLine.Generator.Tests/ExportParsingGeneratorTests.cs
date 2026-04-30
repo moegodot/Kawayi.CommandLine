@@ -176,6 +176,89 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
+    public async Task Global_Subcommand_Promotes_Parsing_Surface_And_Preserves_Nested_Subcommands()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class WatchCommand
+            {
+                /// <summary>
+                /// Once summary
+                /// </summary>
+                [Property]
+                [LongAlias("once")]
+                public bool Once { get; set; }
+            }
+
+            [Command]
+            public partial class GlobalOptionsCommand
+            {
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("force")]
+                public bool ForceOption { get; set; }
+
+                /// <summary>
+                /// Watch summary
+                /// </summary>
+                [Subcommand]
+                public WatchCommand? Watch { get; private set; }
+            }
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Global summary
+                /// </summary>
+                [Subcommand(global: true)]
+                public GlobalOptionsCommand Global { get; set; } = new();
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var snapshot = builder.Build();
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("payload"),
+            new LongOptionToken("force"),
+            new ArgumentOrCommandToken("true"),
+            new ArgumentOrCommandToken("watch"),
+            new LongOptionToken("once"),
+            new ArgumentOrCommandToken("true")
+        ];
+
+        var parsingResult = GetGeneratedParsingResult(result, "Fixtures.Command", arguments);
+        var subcommand = AssertSubcommand(parsingResult, "watch");
+        var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
+        var childValues = AssertFinishedCollection(subcommand.ContinueParseAction());
+
+        await Assert.That(snapshot.Properties.ContainsKey("force-option")).IsTrue();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("global")).IsFalse();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("watch")).IsTrue();
+        await Assert.That(snapshot.Subcommands.ContainsKey("global")).IsFalse();
+        await Assert.That(snapshot.Subcommands.ContainsKey("watch")).IsTrue();
+        await Assert.That(HasExplicitString(parentValues, "input", "payload")).IsTrue();
+        await Assert.That(HasExplicitBoolean(parentValues, "force-option")).IsTrue();
+        await Assert.That(childValues.Command?.Information.Name.Value).IsEqualTo("watch");
+        await Assert.That(HasExplicitBoolean(childValues, "once")).IsTrue();
+    }
+
+    [Test]
     public async Task NonPartialType_ReportsDiagnostic()
     {
         const string source = """

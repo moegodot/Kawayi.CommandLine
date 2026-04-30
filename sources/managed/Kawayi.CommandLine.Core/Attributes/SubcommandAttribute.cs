@@ -14,7 +14,10 @@ public sealed class SubcommandAttribute : SymbolAttribute
     /// </summary>
     /// <param name="require">Whether the subcommand is required.</param>
     /// <param name="visible">Whether the subcommand should be visible in help output.</param>
-    public SubcommandAttribute(bool require = false, bool visible = true) : base(require, visible)
+    /// <param name="global">Whether the subcommand should be present as parent command,
+    /// this making the subcommand instantiated.
+    /// </param>
+    public SubcommandAttribute(bool require = false, bool visible = true,bool global = false) : base(require, visible)
     {
     }
 }

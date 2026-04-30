@@ -167,6 +167,139 @@ public class ExportBindingGeneratorTests
     }
 
     [Test]
+    public async Task Global_Subcommand_Is_Always_Instantiated_And_Binds_From_Parent_Scope()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class GlobalOptionsCommand
+            {
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("force")]
+                public bool ForceOption { get; set; }
+            }
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Global summary
+                /// </summary>
+                [Subcommand(global: true)]
+                public GlobalOptionsCommand Global { get; private set; } = new();
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("payload"),
+            new LongOptionToken("force"),
+            new ArgumentOrCommandToken("true")
+        ];
+
+        var scope = AssertFinishedCollection(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build()));
+        var command = Bind(result, "Fixtures.Command", scope);
+        var global = GetPropertyValue(command, "Global");
+
+        await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("payload");
+        await Assert.That(global).IsNotNull();
+        await Assert.That((bool)GetPropertyValue(global!, "ForceOption")!).IsTrue();
+    }
+
+    [Test]
+    public async Task Global_Subcommand_Binds_From_Leaf_Scope_And_Preserves_Nested_Selected_Subcommands()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class WatchCommand
+            {
+                /// <summary>
+                /// Once summary
+                /// </summary>
+                [Property]
+                [LongAlias("once")]
+                public bool Once { get; set; }
+            }
+
+            [Command]
+            public partial class GlobalOptionsCommand
+            {
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("force")]
+                public bool ForceOption { get; set; }
+
+                /// <summary>
+                /// Watch summary
+                /// </summary>
+                [Subcommand]
+                public WatchCommand? Watch { get; private set; }
+            }
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Global summary
+                /// </summary>
+                [Subcommand(global: true)]
+                public GlobalOptionsCommand Global { get; private set; } = new();
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("payload"),
+            new LongOptionToken("force"),
+            new ArgumentOrCommandToken("true"),
+            new ArgumentOrCommandToken("watch"),
+            new LongOptionToken("once"),
+            new ArgumentOrCommandToken("true")
+        ];
+
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var command = Bind(result, "Fixtures.Command", leafScope);
+        var global = GetPropertyValue(command, "Global");
+        var watch = GetPropertyValue(global!, "Watch");
+
+        await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("payload");
+        await Assert.That(global).IsNotNull();
+        await Assert.That((bool)GetPropertyValue(global!, "ForceOption")!).IsTrue();
+        await Assert.That(watch).IsNotNull();
+        await Assert.That((bool)GetPropertyValue(watch!, "Once")!).IsTrue();
+    }
+
+    [Test]
     public async Task CommandAttribute_Generates_Binding_And_Accepts_CommandSubcommands()
     {
         const string source = """

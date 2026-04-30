@@ -295,7 +295,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                                                    [propertySymbol.Name]));
             }
 
-            ReportNonNullableSubcommandIfNeeded(diagnostics, propertySymbol);
+            ReportNonNullableSubcommandIfNeeded(diagnostics, propertySymbol, roleAttribute.Subcommand!);
 
             var subcommandExport = CreateSubcommandExport(propertySymbol,
                                                          roleAttribute.Subcommand!,
@@ -351,8 +351,14 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
 
     private static void ReportNonNullableSubcommandIfNeeded(
         ImmutableArray<DiagnosticInfo>.Builder diagnostics,
-        IPropertySymbol propertySymbol)
+        IPropertySymbol propertySymbol,
+        AttributeData subcommandAttribute)
     {
+        if (GetAttributeBool(subcommandAttribute, 2, false))
+        {
+            return;
+        }
+
         if (propertySymbol.Type.IsReferenceType &&
             propertySymbol.Type.NullableAnnotation == NullableAnnotation.NotAnnotated)
         {
@@ -503,6 +509,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         int declarationOrder)
     {
         var visible = GetAttributeBool(subcommandAttribute, 1, true);
+        var isGlobal = GetAttributeBool(subcommandAttribute, 2, false);
         var aliases = CreateAliasEntries(aliasAttributes);
         var conflictKeys = ImmutableArray.CreateBuilder<string>(aliases.Length + 1);
         conflictKeys.Add(propertySymbol.Name);
@@ -521,7 +528,10 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                                 propertySymbol.Locations.FirstOrDefault(),
                                 declarationOrder,
                                 null,
-                                conflictKeys.ToImmutable());
+                                conflictKeys.ToImmutable(),
+                                null,
+                                null,
+                                isGlobal);
     }
 
     private static ImmutableArray<AliasEntry> CreateAliasEntries(ImmutableArray<AttributeData> attributes)
@@ -1108,7 +1118,8 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
                             int? argumentPosition = null,
                             ImmutableArray<string>? conflictKeys = null,
                             string? possibleValuesExpression = null,
-                            ImmutableArray<ValidatorExport>? validators = null)
+                            ImmutableArray<ValidatorExport>? validators = null,
+                            bool isGlobal = false)
         {
             Kind = kind;
             MemberName = memberName;
@@ -1126,6 +1137,7 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
             ConflictKeys = conflictKeys ?? [];
             PossibleValuesExpression = possibleValuesExpression;
             Validators = validators ?? [];
+            IsGlobal = isGlobal;
         }
 
         public MemberKind Kind { get; }
@@ -1159,6 +1171,8 @@ public sealed partial class ExportSymbolsGenerator : IIncrementalGenerator
         public string? PossibleValuesExpression { get; }
 
         public ImmutableArray<ValidatorExport> Validators { get; }
+
+        public bool IsGlobal { get; }
     }
 
     private sealed class ValidatorExport

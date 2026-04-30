@@ -203,13 +203,13 @@ public class ExportSymbolsGeneratorTests
                 public static ImmutableDictionary<string, Document> Documents { get; } =
                     ImmutableDictionary<string, Document>.Empty
                         .Add("Serve", new Document("Serve summary", "Serve help"))
-                        .Add("Watch", new Document("Watch summary", "Watch help"));
+                        .Add("Global", new Document("Global summary", "Global help"));
 
                 [Subcommand]
                 public ChildCommand Serve { get; } = new();
 
-                [Subcommand]
-                public ChildCommand? Watch { get; set; }
+                [Subcommand(global: true)]
+                public ChildCommand Global { get; set; } = new();
             }
             """;
 

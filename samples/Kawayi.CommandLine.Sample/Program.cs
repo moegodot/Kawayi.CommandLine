@@ -5,6 +5,7 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold -1
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch error --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --trace-id-prefix demo --color-output true
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload hidden-profile extra-a extra-b --format xml --verbose true --retries 4 --tag alpha --tag beta --env region=cn --env tier=prod serve localhost --daemon false watch --interval 5 --once true --sink stdout changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch --interval 5 --sink -L/bin/foo.a
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json @sample-response.txt
@@ -129,6 +130,11 @@ internal static class Program
         rootBuilder.Properties["env"] = rootBuilder.Properties["env"] with
         {
             DefaultValueFactory = static _ => ImmutableDictionary<string, string>.Empty
+        };
+
+        rootBuilder.Properties["trace-id-prefix"] = rootBuilder.Properties["trace-id-prefix"] with
+        {
+            DefaultValueFactory = static _ => "workspace"
         };
 
         var serveBuilder = GetRequiredSubcommandBuilder(rootBuilder, "serve");
@@ -285,6 +291,9 @@ internal static class Program
         output.WriteLine($"  Tags: {DescribeValue(command.Tags)}");
         output.WriteLine($"  Env: {DescribeValue(command.Env)}");
         output.WriteLine($"  SecretToken: {(command.SecretToken is null ? "null" : "(set)")}");
+        output.WriteLine("  GlobalOptions: instantiated");
+        output.WriteLine($"    TraceIdPrefix: {DescribeValue(command.GlobalOptions.TraceIdPrefix)}");
+        output.WriteLine($"    ColorOutput: {DescribeValue(command.GlobalOptions.ColorOutput)}");
         output.WriteLine($"  Serve: {DescribeSelected(command.Serve is not null)}");
 
         if (command.Serve is null)
@@ -559,6 +568,15 @@ public partial class WorkspaceCommand
     public string? SecretToken { get; set; }
 
     /// <summary>
+    /// Global runtime options
+    /// </summary>
+    /// <remarks>
+    /// Promoted subcommand members are parsed on the root command surface and the bound object is always instantiated.
+    /// </remarks>
+    [Subcommand(global: true)]
+    public GlobalOptionsCommand GlobalOptions { get; private set; } = new();
+
+    /// <summary>
     /// Server operations
     /// </summary>
     /// <remarks>
@@ -568,6 +586,33 @@ public partial class WorkspaceCommand
     [Alias("srv")]
     [Alias("s", visible: false)]
     public ServeCommand? Serve { get; private set; }
+}
+
+/// <summary>
+/// Root-level promoted options provided through a global subcommand.
+/// </summary>
+[Command]
+public partial class GlobalOptionsCommand
+{
+    /// <summary>
+    /// Trace identifier prefix
+    /// </summary>
+    /// <remarks>
+    /// Parsed at the root command level even though the property belongs to a child command model.
+    /// </remarks>
+    [Property]
+    [LongAlias("trace-id-prefix")]
+    public string TraceIdPrefix { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Enable color output
+    /// </summary>
+    /// <remarks>
+    /// Demonstrates a promoted boolean option on an always-instantiated child object.
+    /// </remarks>
+    [Property]
+    [LongAlias("color-output")]
+    public bool ColorOutput { get; set; }
 }
 
 /// <summary>

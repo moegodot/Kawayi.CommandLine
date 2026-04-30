@@ -164,6 +164,9 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
                 continue;
             }
 
+            var isGlobalSubcommand = kind == MemberKind.Subcommand &&
+                                     GetAttributeBool(GetAttribute(propertySymbol, SubcommandAttributeMetadataName)!, 2, false);
+
             if (kind == MemberKind.Subcommand)
             {
                 if (!SupportsBinding(propertySymbol.Type))
@@ -181,13 +184,22 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
                                                        [propertySymbol.Name]));
                     continue;
                 }
+
+                if (isGlobalSubcommand && !SupportsGeneratedBinding(propertySymbol.Type))
+                {
+                    diagnostics.Add(new DiagnosticInfo(InvalidSubcommandBindableDiagnostic,
+                                                       propertySymbol.Locations.FirstOrDefault(),
+                                                       [propertySymbol.Name]));
+                    continue;
+                }
             }
 
             members.Add(new MemberBinding(kind.Value,
                                           propertySymbol.Name,
                                           propertySymbol.Type.ToDisplayString(FullyQualifiedTypeFormat),
                                           propertySymbol.Type.ToDisplayString(FullyQualifiedNullableTypeFormat),
-                                          declarationOrder++));
+                                          declarationOrder++,
+                                          isGlobalSubcommand));
         }
 
         return new ExportTarget(typeSymbol,
@@ -231,6 +243,13 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
         return namedType.AllInterfaces.Any(static item => item.ToDisplayString() == BindableMetadataName) ||
                HasAttribute(namedType, BindableAttributeMetadataName) ||
                HasAttribute(namedType, CommandAttributeMetadataName);
+    }
+
+    private static bool SupportsGeneratedBinding(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol is INamedTypeSymbol namedType &&
+               (HasAttribute(namedType, BindableAttributeMetadataName) ||
+                HasAttribute(namedType, CommandAttributeMetadataName));
     }
 
     private static bool HasAccessibleParameterlessConstructor(ITypeSymbol typeSymbol)
@@ -371,6 +390,19 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
 
     private static void AppendSubcommandBinding(StringBuilder builder, MemberBinding member, int indentLevel)
     {
+        if (member.IsGlobal)
+        {
+            var globalPropertyName = EscapeIdentifier(member.MemberName);
+            var globalChildVariable = member.MemberName + "Value";
+            AppendIndentedLine(builder, indentLevel, $"var {globalChildVariable} = new {member.TypeName}();");
+            AppendIndentedLine(
+                builder,
+                indentLevel,
+                $"((global::Kawayi.CommandLine.Abstractions.IBindable){globalChildVariable}).Bind(bindingScope);");
+            AppendIndentedLine(builder, indentLevel, $"{globalPropertyName} = {globalChildVariable};");
+            return;
+        }
+
         var definitionVariable = member.MemberName + "Definition";
         var resultVariable = member.MemberName + "Results";
         var childVariable = member.MemberName + "Value";
@@ -413,7 +445,7 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
         AppendIndentedLine(builder, indentLevel, "{");
         AppendIndentedLine(builder, indentLevel + 1, "for (var current = results; current is not null; current = current.Parent)");
         AppendIndentedLine(builder, indentLevel + 1, "{");
-        AppendIndentedLine(builder, indentLevel + 2, "if (IsMatchingBindingScope(current))");
+        AppendIndentedLine(builder, indentLevel + 2, "if (MatchesGeneratedBindingScope(current))");
         AppendIndentedLine(builder, indentLevel + 2, "{");
         AppendIndentedLine(builder, indentLevel + 3, "return current;");
         AppendIndentedLine(builder, indentLevel + 2, "}");
@@ -428,7 +460,7 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
         AppendIndentedLine(
             builder,
             indentLevel,
-            "private static bool IsMatchingBindingScope(global::Kawayi.CommandLine.Abstractions.IParsingResultCollection scope)");
+            "internal static bool MatchesGeneratedBindingScope(global::Kawayi.CommandLine.Abstractions.IParsingResultCollection scope)");
         AppendIndentedLine(builder, indentLevel, "{");
 
         if (target.Members.IsDefaultOrEmpty)
@@ -447,6 +479,7 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
                 {
                     MemberKind.Argument => $"HasTypedDefinition<global::Kawayi.CommandLine.Abstractions.ArgumentDefinition>(scope, {GenerateCommandLineNameExpression(member.MemberName)})",
                     MemberKind.Property => $"HasTypedDefinition<global::Kawayi.CommandLine.Abstractions.PropertyDefinition>(scope, {GenerateCommandLineNameExpression(member.MemberName)})",
+                    MemberKind.Subcommand when member.IsGlobal => $"{member.TypeName}.MatchesGeneratedBindingScope(scope)",
                     MemberKind.Subcommand => $"HasSubcommandDefinition(scope, {GenerateCommandLineNameExpression(member.MemberName)})",
                     _ => throw new ArgumentOutOfRangeException(nameof(member.Kind))
                 };
@@ -704,6 +737,16 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
         return GetAttribute(symbol, metadataName) is not null;
     }
 
+    private static bool GetAttributeBool(AttributeData attribute, int index, bool defaultValue)
+    {
+        if (attribute.ConstructorArguments.Length <= index)
+        {
+            return defaultValue;
+        }
+
+        return attribute.ConstructorArguments[index].Value is bool value ? value : defaultValue;
+    }
+
     private static INamedTypeSymbol? FindFirstMissingPartialType(INamedTypeSymbol typeSymbol)
     {
         for (var current = typeSymbol; current is not null; current = current.ContainingType)
@@ -801,13 +844,15 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
             string memberName,
             string typeName,
             string nullableTypeName,
-            int declarationOrder)
+            int declarationOrder,
+            bool isGlobal)
         {
             Kind = kind;
             MemberName = memberName;
             TypeName = typeName;
             NullableTypeName = nullableTypeName;
             DeclarationOrder = declarationOrder;
+            IsGlobal = isGlobal;
         }
 
         public MemberKind Kind { get; }
@@ -819,6 +864,8 @@ public sealed partial class ExportBindingGenerator : IIncrementalGenerator
         public string NullableTypeName { get; }
 
         public int DeclarationOrder { get; }
+
+        public bool IsGlobal { get; }
     }
 
     private sealed class DiagnosticInfo
