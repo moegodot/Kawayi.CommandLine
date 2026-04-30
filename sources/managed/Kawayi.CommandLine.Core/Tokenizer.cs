@@ -12,6 +12,11 @@ namespace Kawayi.CommandLine.Core;
 public sealed class Tokenizer : ITokenizer
 {
     /// <summary>
+    /// A global tokenizer
+    /// </summary>
+    public static Tokenizer Instance { get; } = new();
+
+    /// <summary>
     /// Tokenizes the supplied command-line inputs.
     /// </summary>
     /// <param name="inputs">The raw command-line inputs.</param>

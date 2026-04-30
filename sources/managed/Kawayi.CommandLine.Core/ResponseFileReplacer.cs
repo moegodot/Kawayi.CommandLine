@@ -11,6 +11,11 @@ namespace Kawayi.CommandLine.Core;
 /// </summary>
 public sealed class ResponseFileReplacer : IResponseFileReplacer
 {
+    /// <summary>
+    /// A global response file replacer using <see cref="Tokenizer"/>.
+    /// </summary>
+    public static ResponseFileReplacer Instance { get; } = new(Tokenizer.Instance);
+
     private readonly ITokenizer tokenizer;
 
     /// <summary>
