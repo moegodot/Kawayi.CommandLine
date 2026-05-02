@@ -1,4 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Kawayi.CommandLine.Abstractions\Kawayi.CommandLine.Abstractions.csproj" />
     <ProjectReference Include="..\Kawayi.CommandLine.Core\Kawayi.CommandLine.Core.csproj" />

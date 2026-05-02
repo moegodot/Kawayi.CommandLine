@@ -24,86 +24,19 @@ public static class ParsingResultExtensions
                 ? v
                 : throw new ArgumentException($"expect {typeof(T).FullName}, get {result}");
         }
-    }
-
-    extension(IParsingResultCollection result)
-    {
-        /// <summary>
-        /// Tries to resolve the effective value for a definition in the current scope by applying
-        /// explicit values, default value factories, and CLR defaults in that order.
-        /// </summary>
-        public bool TryGetEffectiveValue(TypedDefinition definition, out object? value)
-        {
-            ArgumentNullException.ThrowIfNull(result);
-            ArgumentNullException.ThrowIfNull(definition);
-
-            if (!result.Scope.AvailableTypedDefinitions.Any(candidate =>
-                    EqualityComparer<TypedDefinition>.Default.Equals(candidate, definition)))
-            {
-                value = null;
-                return false;
-            }
-
-            if (result.TryGetValue(definition, out value))
-            {
-                return true;
-            }
-
-            if (definition.DefaultValueFactory is not null)
-            {
-                value = definition.DefaultValueFactory(result);
-                return true;
-            }
-
-            if (definition.Requirement)
-            {
-                value = null;
-                return false;
-            }
-
-            value = GetClrDefault(definition.Type);
-            return true;
-        }
 
         /// <summary>
-        /// Gets the effective value for a definition in the current scope by applying explicit values,
-        /// default value factories, and CLR defaults in that order.
+        /// parse <see cref="Subcommand"/> until it return other type's result.
         /// </summary>
-        public object? GetEffectiveValueOrDefault(TypedDefinition definition)
+        /// <returns>the parsing result, guarantee it's not <see cref="Subcommand"/></returns>
+        public ParsingResult ParseRecursively()
         {
-            ArgumentNullException.ThrowIfNull(result);
-            ArgumentNullException.ThrowIfNull(definition);
-
-            if (!result.Scope.AvailableTypedDefinitions.Any(candidate =>
-                    EqualityComparer<TypedDefinition>.Default.Equals(candidate, definition)))
+            while (result is Subcommand subcommand)
             {
-                throw new InvalidOperationException(
-                    $"Definition '{definition.Information.Name.Value}' is not available in the current scope.");
+                result = subcommand.ContinueParseAction();
             }
 
-            if (result.TryGetValue(definition, out var explicitValue))
-            {
-                return explicitValue;
-            }
-
-            if (definition.DefaultValueFactory is not null)
-            {
-                return definition.DefaultValueFactory(result);
-            }
-
-            if (definition.Requirement)
-            {
-                throw new InvalidOperationException(
-                    $"Required definition '{definition.Information.Name.Value}' does not have an explicit value or default factory.");
-            }
-
-            return GetClrDefault(definition.Type);
+            return result;
         }
-    }
-
-    private static object? GetClrDefault(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type type)
-    {
-        return TypeDefaultValues.GetValue(type);
     }
 }
