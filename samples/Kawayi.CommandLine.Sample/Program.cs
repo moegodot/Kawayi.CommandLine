@@ -4,6 +4,8 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format=json --env=region=cn --execution-mode=background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --workspace-name atelier
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold -1
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload extra-a extra-b --format json --verbose
+// CLI_DEBUG=1 dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost --daemon watch --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch error --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --trace-id-prefix demo --color-output true
@@ -55,7 +57,7 @@ internal static class Program
         "workspace-demo",
         new Document(
             "Attribute-first command line showcase",
-            "Demonstrates attribute-driven command metadata plus post-generation ParsingBuilder augmentation."),
+            "Demonstrates attribute-driven command metadata plus post-generation schema augmentation."),
         new Version(1, 0, 0),
         "https://github.com/moegodot/");
 
@@ -79,7 +81,7 @@ internal static class Program
         var effectiveBuilder = ShouldUseRelaxedSubcommandHelpRoute(tokens)
             ? CloneForScopedHelp(builder)
             : builder;
-        var result = ParsingBuilder.CreateParsing(parsingOptions, tokens, effectiveBuilder.Build());
+        var result = CliSchemaParser.CreateParsing(parsingOptions, tokens, effectiveBuilder.Build());
         return HandleResult(result);
     }
 
@@ -96,7 +98,9 @@ internal static class Program
             ParsingOptions.DefaultVersionFlags,
             ParsingOptions.DefaultHelpFlags,
             output,
-            ParsingOptions.DefaultStyle,
+            output,
+            ParsingOptions.DefaultEnableStyle,
+            ParsingOptions.DefaultEnableStyle,
             ParsingOptions.DefaultDebug,
             styleTable);
     }
@@ -194,7 +198,11 @@ internal static class Program
 
     private static CliSchemaBuilder CloneForScopedHelp(CliSchemaBuilder source)
     {
-        var clone = new ParsingBuilder(source.ParsingOptions);
+        var clone = new CliSchemaBuilder(
+            ImmutableDictionary.CreateBuilder<string, CommandDefinition>(),
+            ImmutableDictionary.CreateBuilder<string, CliSchemaBuilder>(),
+            ImmutableDictionary.CreateBuilder<string, PropertyDefinition>(),
+            ImmutableList.CreateBuilder<ParameterDefinition>());
 
         foreach (var (key, definition) in source.SubcommandDefinitions)
         {
@@ -240,8 +248,10 @@ internal static class Program
             case VersionFlagsDetected versionFlagsDetected:
                 versionFlagsDetected.FlagAction();
                 return 0;
-            case ParsingFinished<IParsingResultCollection> parsingFinished:
-                PrintSuccess(parsingFinished.Result.GetRootCommand().Bind<WorkspaceCommand>(), Console.Out);
+            case ParsingFinished<Cli> parsingFinished:
+                var command = new WorkspaceCommand();
+                ((IBindable)command).Bind(parsingFinished.Result);
+                PrintSuccess(command, Console.Out);
                 return 0;
             case InvalidArgumentDetected invalidArgumentDetected:
                 PrintError("Invalid argument", $"{invalidArgumentDetected.Argument}: expected {invalidArgumentDetected.Expect}", invalidArgumentDetected.Exception);

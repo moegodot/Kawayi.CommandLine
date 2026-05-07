@@ -82,22 +82,24 @@ public sealed record ParsingOptions(
     /// <summary>
     /// Gets whether styled output should be enabled by default for the current environment.
     /// </summary>
-    public static bool DefaultStyle
+    public static bool DefaultEnableStyle
     {
         get
         {
-            if (_defaultStyle is null)
+            if (_defaultStyle is not null)
             {
-                var noColorEnv = Environment.GetEnvironmentVariable("NO_COLOR");
-                var legacyNoColorEnv = Environment.GetEnvironmentVariable("NOCOLOR");
-                var ciEnv = Environment.GetEnvironmentVariable("CI");
-
-                var noColor = IsPresentEnvironmentValue(noColorEnv);
-                var legacyNoColor = IsTruthyEnvironmentValue(legacyNoColorEnv);
-                var ci = IsTruthyEnvironmentValue(ciEnv);
-
-                _defaultStyle = !(noColor || legacyNoColor || ci);
+                return _defaultStyle.Value;
             }
+
+            var noColorEnv = Environment.GetEnvironmentVariable("NO_COLOR");
+            var legacyNoColorEnv = Environment.GetEnvironmentVariable("NOCOLOR");
+            var ciEnv = Environment.GetEnvironmentVariable("CI");
+
+            var noColor = IsPresentEnvironmentValue(noColorEnv);
+            var legacyNoColor = IsTruthyEnvironmentValue(legacyNoColorEnv);
+            var ci = IsTruthyEnvironmentValue(ciEnv);
+
+            _defaultStyle = !(noColor || legacyNoColor || ci);
 
             return _defaultStyle.Value;
         }
@@ -131,7 +133,8 @@ public sealed record ParsingOptions(
            DefaultHelpFlags,
            Console.Out,
            Console.Out,
-           DefaultStyle,
+           DefaultEnableStyle,
+           DefaultEnableStyle,
            DefaultDebug,
            StyleTable.Default)
     {

@@ -17,7 +17,7 @@ namespace Kawayi.CommandLine.Generator.Tests;
 public class ExportParsingGeneratorTests
 {
     [Test]
-    public async Task Generates_ParsingExporter_And_Builds_ParsingBuilder_From_Symbols()
+    public async Task Generates_ParsingExporter_And_Builds_CliSchemaBuilder_From_Symbols()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -55,7 +55,7 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         var snapshot = builder.Build();
         var symbols = GetSymbols(result, "Fixtures.Command");
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
@@ -116,11 +116,12 @@ public class ExportParsingGeneratorTests
         var parsingResult = GetGeneratedParsingResult(result, "Fixtures.Command", arguments);
         var subcommand = AssertSubcommand(parsingResult, "serve-command");
         var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
-        var childValues = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var rootValues = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var childValues = rootValues.Subcommands[subcommand.Definition];
 
-        await Assert.That(parentValues.Command).IsNull();
+        await Assert.That(parentValues.CurrentCommandDefinition).IsNull();
         await Assert.That(HasExplicitString(parentValues, "input", "payload")).IsTrue();
-        await Assert.That(childValues.Command?.Information.Name.Value).IsEqualTo("serve-command");
+        await Assert.That(childValues.CurrentCommandDefinition?.Information.Name.Value).IsEqualTo("serve-command");
         await Assert.That(HasExplicitBoolean(childValues, "force-option")).IsTrue();
     }
 
@@ -162,7 +163,7 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         var snapshot = builder.Build();
         var symbols = GetSymbols(result, "Fixtures.Command");
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
@@ -230,7 +231,7 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         var snapshot = builder.Build();
         ImmutableArray<Token> arguments =
         [
@@ -245,7 +246,8 @@ public class ExportParsingGeneratorTests
         var parsingResult = GetGeneratedParsingResult(result, "Fixtures.Command", arguments);
         var subcommand = AssertSubcommand(parsingResult, "watch");
         var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
-        var childValues = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var rootValues = AssertFinishedCollection(subcommand.ContinueParseAction());
+        var childValues = rootValues.Subcommands[subcommand.Definition];
 
         await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("force-option"))).IsTrue();
         await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("global"))).IsFalse();
@@ -254,7 +256,7 @@ public class ExportParsingGeneratorTests
         await Assert.That(snapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken("watch"))).IsTrue();
         await Assert.That(HasExplicitString(parentValues, "input", "payload")).IsTrue();
         await Assert.That(HasExplicitBoolean(parentValues, "force-option")).IsTrue();
-        await Assert.That(childValues.Command?.Information.Name.Value).IsEqualTo("watch");
+        await Assert.That(childValues.CurrentCommandDefinition?.Information.Name.Value).IsEqualTo("watch");
         await Assert.That(HasExplicitBoolean(childValues, "once")).IsTrue();
     }
 
@@ -437,7 +439,7 @@ public class ExportParsingGeneratorTests
         return references.ToImmutable();
     }
 
-    private static CliSchemaBuilder GetParsingBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
+    private static CliSchemaBuilder GetCliSchemaBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
     {
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
         var method = targetType.GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)
@@ -497,6 +499,8 @@ public class ExportParsingGeneratorTests
             ParsingOptions.DefaultVersionFlags,
             ParsingOptions.DefaultHelpFlags,
             TextWriter.Null,
+            TextWriter.Null,
+            false,
             false,
             false,
             StyleTable.Default);
@@ -522,9 +526,9 @@ public class ExportParsingGeneratorTests
         return targetType?.AllInterfaces.Any(item => item.ToDisplayString() == interfaceMetadataName) == true;
     }
 
-    private static IParsingResultCollection AssertFinishedCollection(ParsingResult result)
+    private static Cli AssertFinishedCollection(ParsingResult result)
     {
-        return result is ParsingFinished { UntypedResult: IParsingResultCollection collection }
+        return result is ParsingFinished { UntypedResult: Cli collection }
             ? collection
             : throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
     }
@@ -545,24 +549,40 @@ public class ExportParsingGeneratorTests
         return subcommand;
     }
 
-    private static bool HasExplicitBoolean(IParsingResultCollection collection, string definitionName)
+    private static bool HasExplicitBoolean(Cli collection, string definitionName)
     {
-        var definition = collection.Scope.AvailableTypedDefinitions
+        var definition = collection.Schema.Argument.Cast<TypedDefinition>()
+            .Concat(collection.Schema.Properties.Values.Distinct())
             .Single(item => string.Equals(item.Information.Name.Value, definitionName, StringComparison.Ordinal));
 
-        return collection.TryGetValue(definition, out var rawValue) &&
+        return TryGetValue(collection, definition, out var rawValue) &&
                rawValue is bool typedValue &&
                typedValue;
     }
 
-    private static bool HasExplicitString(IParsingResultCollection collection, string definitionName, string expectedValue)
+    private static bool HasExplicitString(Cli collection, string definitionName, string expectedValue)
     {
-        var definition = collection.Scope.AvailableTypedDefinitions
+        var definition = collection.Schema.Argument.Cast<TypedDefinition>()
+            .Concat(collection.Schema.Properties.Values.Distinct())
             .Single(item => string.Equals(item.Information.Name.Value, definitionName, StringComparison.Ordinal));
 
-        return collection.TryGetValue(definition, out var rawValue) &&
+        return TryGetValue(collection, definition, out var rawValue) &&
                rawValue is string typedValue &&
                string.Equals(typedValue, expectedValue, StringComparison.Ordinal);
+    }
+
+    private static bool TryGetValue(Cli collection, TypedDefinition definition, out object? value)
+    {
+        switch (definition)
+        {
+            case ParameterDefinition argument:
+                return collection.Arguments.TryGetValue(argument, out value);
+            case PropertyDefinition property:
+                return collection.Properties.TryGetValue(property, out value);
+            default:
+                value = null;
+                return false;
+        }
     }
 
     private sealed record GeneratorRunOutcome(

@@ -29,9 +29,9 @@ public static class CliExtensions
         }
 
         /// <summary>
-        /// get the root command of a subcommand's <see cref="Cli"/>
+        /// Gets the root command for a parsed command or subcommand.
         /// </summary>
-        /// <returns>the <see cref="Cli"/> that <see cref="Cli.Parent"/> is <see langword="null"/></returns>
+        /// <returns>The <see cref="Cli"/> whose <see cref="Cli.ParentCommand"/> is <see langword="null"/>.</returns>
         public Cli GetRootCommand()
         {
             while (result.ParentCommand != null)

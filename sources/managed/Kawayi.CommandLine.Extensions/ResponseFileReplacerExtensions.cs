@@ -15,6 +15,10 @@ public static class ResponseFileReplacerExtensions
 {
     extension(ImmutableArray<Token> tokens)
     {
+        /// <summary>
+        /// Replaces response-file tokens by using the default response-file replacer.
+        /// </summary>
+        /// <returns>The expanded token sequence.</returns>
         [Pure]
         public ImmutableArray<Token> UseResponseFile()
         {

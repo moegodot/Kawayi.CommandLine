@@ -82,7 +82,7 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         builder.Properties["retries"] = builder.Properties["retries"] with
         {
             DefaultValueFactory = static _ => 7
@@ -99,7 +99,7 @@ public class ExportBindingGeneratorTests
             new ArgumentOrCommandToken("true")
         ];
 
-        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build())));
         var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var serve = GetPropertyValue(command, "ServeCommand");
 
@@ -153,13 +153,13 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload")
         ];
 
-        var scope = AssertFinishedCollection(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build()));
+        var scope = AssertFinishedCollection(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build()));
         var command = Bind(result, "Fixtures.Command", scope);
 
         await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("payload");
@@ -204,7 +204,7 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload"),
@@ -212,7 +212,7 @@ public class ExportBindingGeneratorTests
             new ArgumentOrCommandToken("true")
         ];
 
-        var scope = AssertFinishedCollection(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build()));
+        var scope = AssertFinishedCollection(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build()));
         var command = Bind(result, "Fixtures.Command", scope);
         var global = GetPropertyValue(command, "Global");
 
@@ -276,7 +276,7 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload"),
@@ -287,7 +287,7 @@ public class ExportBindingGeneratorTests
             new ArgumentOrCommandToken("true")
         ];
 
-        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build())));
         var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var global = GetPropertyValue(command, "Global");
         var watch = GetPropertyValue(global!, "Watch");
@@ -337,7 +337,7 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload"),
@@ -346,7 +346,7 @@ public class ExportBindingGeneratorTests
             new ArgumentOrCommandToken("true")
         ];
 
-        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build())));
         var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var serve = GetPropertyValue(command, "ServeCommand");
 
@@ -408,7 +408,7 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("root-input"),
@@ -420,7 +420,7 @@ public class ExportBindingGeneratorTests
             new ArgumentOrCommandToken("child-value")
         ];
 
-        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build())));
         var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var serve = GetPropertyValue(command, "Serve");
 
@@ -432,7 +432,7 @@ public class ExportBindingGeneratorTests
     }
 
     [Test]
-    public async Task Binding_Root_From_Leaf_Scope_Fails_Instead_Of_AutoRewinding()
+    public async Task Binding_Root_From_Continued_Subcommand_Result_Uses_Composed_Subcommand_Tree()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -469,7 +469,7 @@ public class ExportBindingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload"),
@@ -478,9 +478,13 @@ public class ExportBindingGeneratorTests
             new ArgumentOrCommandToken("true")
         ];
 
-        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var rootScope = AssertFinishedCollection(ContinueSubcommands(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var command = Bind(result, "Fixtures.Command", rootScope);
+        var serve = GetPropertyValue(command, "Serve");
 
-        await Assert.That(() => Bind(result, "Fixtures.Command", leafScope)).Throws<InvalidOperationException>();
+        await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("payload");
+        await Assert.That(serve).IsNotNull();
+        await Assert.That((bool)GetPropertyValue(serve!, "Force")!).IsTrue();
     }
 
     [Test]
@@ -568,7 +572,7 @@ public class ExportBindingGeneratorTests
                 {
                 }
 
-                public void Bind(IParsingResultCollection results)
+                public void Bind(Cli results)
                 {
                 }
             }
@@ -646,13 +650,13 @@ public class ExportBindingGeneratorTests
             .ToBuilder();
 
         references.Add(MetadataReference.CreateFromFile(typeof(CommandAttribute).Assembly.Location));
-        references.Add(MetadataReference.CreateFromFile(typeof(ParsingBuilder).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(CliSchemaParser).Assembly.Location));
         references.Add(MetadataReference.CreateFromFile(typeof(IBindable).Assembly.Location));
 
         return references.ToImmutable();
     }
 
-    private static CliSchemaBuilder GetParsingBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
+    private static CliSchemaBuilder GetCliSchemaBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
     {
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
         var method = targetType.GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)
@@ -666,7 +670,7 @@ public class ExportBindingGeneratorTests
     private static object Bind(
         GeneratorRunOutcome outcome,
         string targetTypeMetadataName,
-        IParsingResultCollection result)
+        Cli result)
     {
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
         var instance = Activator.CreateInstance(targetType)
@@ -702,20 +706,20 @@ public class ExportBindingGeneratorTests
         return current;
     }
 
-    private static IParsingResultCollection AssertFinishedCollection(ParsingResult result)
+    private static Cli AssertFinishedCollection(ParsingResult result)
     {
-        return result is ParsingFinished { UntypedResult: IParsingResultCollection collection }
+        return result is ParsingFinished { UntypedResult: Cli collection }
             ? collection
             : throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
     }
 
-    private static IParsingResultCollection GetRootCommand(IParsingResultCollection result)
+    private static Cli GetRootCommand(Cli result)
     {
         var current = result;
 
-        while (current.Parent is not null)
+        while (current.ParentCommand is not null)
         {
-            current = current.Parent;
+            current = current.ParentCommand;
         }
 
         return current;
@@ -734,6 +738,8 @@ public class ExportBindingGeneratorTests
             ParsingOptions.DefaultVersionFlags,
             ParsingOptions.DefaultHelpFlags,
             TextWriter.Null,
+            TextWriter.Null,
+            false,
             false,
             false,
             StyleTable.Default);

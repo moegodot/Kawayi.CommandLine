@@ -80,7 +80,7 @@ internal static class DebugOutput
                                subcommand.Definition.Information.Name.Value);
                 break;
             case FlagDetected flag:
-                AppendKeyValue(text, options, "Trigger argument", flag.TriggerArgument);
+                AppendKeyValue(text, options, "Trigger argument", FormatToken(flag.TriggerArgument));
                 break;
             case UnknownArgumentDetected unknown:
                 AppendKeyValue(text, options, "Unknown argument", unknown.UnknownArgument);

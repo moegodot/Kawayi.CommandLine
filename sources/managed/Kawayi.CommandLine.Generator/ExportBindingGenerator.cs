@@ -248,7 +248,7 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "public void Bind(global::Kawayi.CommandLine.Abstractions.IParsingResultCollection results)");
+            "public void Bind(global::Kawayi.CommandLine.Abstractions.Cli results)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(results);");
 
@@ -318,7 +318,7 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            $"if (results.TryGetSubcommand({definitionVariable}, out var {resultVariable}))");
+            $"if (results.Subcommands.TryGetValue({definitionVariable}, out var {resultVariable}))");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, $"var {childVariable} = new {member.TypeName}();");
         GeneratorSource.AppendIndentedLine(
@@ -339,9 +339,9 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "private static TDefinition GetRequiredTypedDefinition<TDefinition>(global::Kawayi.CommandLine.Abstractions.IParsingResultCollection scope, string name) where TDefinition : global::Kawayi.CommandLine.Abstractions.TypedDefinition");
+            "private static TDefinition GetRequiredTypedDefinition<TDefinition>(global::Kawayi.CommandLine.Abstractions.Cli scope, string name) where TDefinition : global::Kawayi.CommandLine.Abstractions.TypedDefinition");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var definition in scope.Scope.AvailableTypedDefinitions)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var definition in GetAvailableTypedDefinitions(scope))");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
         GeneratorSource.AppendIndentedLine(
             builder,
@@ -361,9 +361,9 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "private static global::Kawayi.CommandLine.Abstractions.CommandDefinition GetRequiredSubcommandDefinition(global::Kawayi.CommandLine.Abstractions.IParsingResultCollection scope, string name)");
+            "private static global::Kawayi.CommandLine.Abstractions.CommandDefinition GetRequiredSubcommandDefinition(global::Kawayi.CommandLine.Abstractions.Cli scope, string name)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var definition in scope.Scope.AvailableSubcommands)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var definition in global::System.Linq.Enumerable.Distinct(scope.Schema.SubcommandDefinitions.Values))");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
         GeneratorSource.AppendIndentedLine(
             builder,
@@ -383,9 +383,9 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "private static object? GetEffectiveValue(global::Kawayi.CommandLine.Abstractions.IParsingResultCollection scope, global::Kawayi.CommandLine.Abstractions.TypedDefinition definition, string memberName)");
+            "private static object? GetEffectiveValue(global::Kawayi.CommandLine.Abstractions.Cli scope, global::Kawayi.CommandLine.Abstractions.TypedDefinition definition, string memberName)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "if (scope.TryGetValue(definition, out var explicitValue))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "if (TryGetValue(scope, definition, out var explicitValue))");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "EnsureEffectiveValueSatisfiesRequirement(definition, explicitValue, memberName);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "return explicitValue;");
@@ -406,6 +406,40 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var clrDefault = global::Kawayi.CommandLine.Core.TypeDefaultValues.GetValue(definition.Type);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "EnsureEffectiveValueSatisfiesRequirement(definition, clrDefault, memberName);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return clrDefault;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(
+            builder,
+            indentLevel,
+            "private static global::System.Collections.Generic.IEnumerable<global::Kawayi.CommandLine.Abstractions.TypedDefinition> GetAvailableTypedDefinitions(global::Kawayi.CommandLine.Abstractions.Cli scope)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var definition in scope.Schema.Argument)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "yield return definition;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var definition in global::System.Linq.Enumerable.Distinct(scope.Schema.Properties.Values))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "yield return definition;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(
+            builder,
+            indentLevel,
+            "private static bool TryGetValue(global::Kawayi.CommandLine.Abstractions.Cli scope, global::Kawayi.CommandLine.Abstractions.TypedDefinition definition, out object? value)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "switch (definition)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "case global::Kawayi.CommandLine.Abstractions.ParameterDefinition argument:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "return scope.Arguments.TryGetValue(argument, out value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "case global::Kawayi.CommandLine.Abstractions.PropertyDefinition property:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "return scope.Properties.TryGetValue(property, out value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "default:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "value = null;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "return false;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
 
         GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);

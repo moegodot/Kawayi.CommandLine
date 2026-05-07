@@ -51,7 +51,7 @@ Kawayi.CommandLine 是一个面向 .NET 10 和 C# 14 的属性驱动命令行解
 </ItemGroup>
 ```
 
-如果应用只需要手写 `ParsingBuilder`，可以不接入 Generator。若使用属性生成文档、符号、解析和绑定代码，命令类型必须是 `partial`。
+如果应用只需要手写 `CliSchemaBuilder` 和调用 `CliSchemaParser`，可以不接入 Generator。若使用属性生成文档、符号、解析和绑定代码，命令类型必须是 `partial`。
 
 ## 快速上手
 
@@ -128,16 +128,26 @@ var rawTokens = tokenizer.Tokenize([.. args]);
 var tokens = new ResponseFileReplacer(tokenizer).Replace(rawTokens);
 
 var builder = BuildCommand.ExportParsing(options);
-var result = ParsingBuilder.CreateParsing(options, tokens, builder.Build());
+var result = ContinueSubcommands(CliSchemaParser.CreateParsing(options, tokens, builder.Build()));
 
 return result switch
 {
     HelpFlagsDetected help => Run(help.FlagAction, 0),
     VersionFlagsDetected version => Run(version.FlagAction, 0),
-    ParsingFinished<IParsingResultCollection> finished => RunCommand(finished.Result.Bind<BuildCommand>()),
+    ParsingFinished<Cli> finished => RunCommand(finished.Result.Bind<BuildCommand>()),
     GotError error => Report(error),
     _ => 1
 };
+
+static ParsingResult ContinueSubcommands(ParsingResult result)
+{
+    while (result is Subcommand subcommand)
+    {
+        result = subcommand.ContinueParseAction();
+    }
+
+    return result;
+}
 
 static int Run(Action action, int exitCode)
 {
@@ -159,7 +169,7 @@ static int Report(GotError error)
 }
 ```
 
-生成器会从 XML 文档注释中读取摘要和详细说明，生成帮助文档、符号表、解析入口和绑定逻辑。`[Command]` 是推荐的一站式命令属性，会启用 `ExportParsing`、`CreateParsing`、`Documents`、`Symbols` 和绑定生成；`[ExportDocument]`、`[ExportSymbols]`、`[ExportParsing]`、`[Bindable]` 仍可用于只需要部分导出的高级场景。需要在解析后调整可能值、默认值或验证规则时，可以先取得 `ExportParsing(options)` 返回的 `IParsingBuilder`，再修改对应定义，最后调用 `Build()`。
+生成器会从 XML 文档注释中读取摘要和详细说明，生成帮助文档、符号表、解析入口和绑定逻辑。`[Command]` 是推荐的一站式命令属性，会启用 `ExportParsing`、`CreateParsing`、`Documents`、`Symbols` 和绑定生成；`[ExportDocument]`、`[ExportSymbols]`、`[ExportParsing]`、`[Bindable]` 仍可用于只需要部分导出的高级场景。需要在解析后调整可能值、默认值或验证规则时，可以先取得 `ExportParsing(options)` 返回的 `CliSchemaBuilder`，再修改对应定义，最后调用 `Build()`。
 
 ## Sample
 
@@ -175,6 +185,14 @@ NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.Comma
 
 ```bash
 NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.CommandLine.Sample.csproj -- payload --format=json --env=region=cn --execution-mode=background
+```
+
+```bash
+NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.CommandLine.Sample.csproj -- payload extra-a extra-b --format json --verbose
+```
+
+```bash
+CLI_DEBUG=1 NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.CommandLine.Sample.csproj -- payload --format json serve localhost --daemon watch --interval 5
 ```
 
 ```bash
@@ -212,14 +230,14 @@ dotnet build Kawayi.CommandLine.slnx
 运行全部测试：
 
 ```bash
-dotnet test Kawayi.CommandLine.slnx
+dotnet test --solution Kawayi.CommandLine.slnx
 ```
 
 运行单个测试项目：
 
 ```bash
-dotnet test tests/Kawayi.CommandLine.Core.Tests/Kawayi.CommandLine.Core.Tests.csproj
-dotnet test tests/Kawayi.CommandLine.Generator.Tests/Kawayi.CommandLine.Generator.Tests.csproj
+dotnet test --project tests/Kawayi.CommandLine.Core.Tests/Kawayi.CommandLine.Core.Tests.csproj
+dotnet test --project tests/Kawayi.CommandLine.Generator.Tests/Kawayi.CommandLine.Generator.Tests.csproj
 ```
 
 本地仓库没有配置 remote 时，SourceLink 可能报告 repository 或 source control warning；这通常是本地环境提示，不代表命令行解析功能失败。
