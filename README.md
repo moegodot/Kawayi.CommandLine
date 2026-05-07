@@ -24,7 +24,7 @@ Kawayi.CommandLine 是一个面向 .NET 10 和 C# 14 的属性驱动命令行解
 - `sources/managed/Kawayi.CommandLine.Core`：tokenizer、响应文件展开、解析器、构建器、属性定义和基础类型解析。
 - `sources/managed/Kawayi.CommandLine.Extensions`：面向解析结果和可解析类型的便捷扩展。
 - `sources/managed/Kawayi.CommandLine.Generator`：Roslyn 源生成器，负责导出文档、符号、解析器和绑定代码。
-- `sources/managed/Kawayi.CommandLine.ExitCodes`：常用退出码常量和校验工具。
+- `sources/managed/Kawayi.ExitCodes`：常用退出码常量和校验工具。
 - `sources/managed/Kawayi.Escapes`：字符串转义规则，主要服务于容器解析。
 - `samples/Kawayi.CommandLine.Sample`：功能展示项目，新能力应同步在这里体现。
 - `tests`：TUnit 测试，覆盖 Core、Generator、ExitCodes 和 Escapes。
@@ -124,7 +124,7 @@ var options = ParsingOptions.Create<BuildCommand>(
     "https://example.com/");
 
 var tokenizer = new Tokenizer();
-var rawTokens = tokenizer.Tokenlize([.. args]);
+var rawTokens = tokenizer.Tokenize([.. args]);
 var tokens = new ResponseFileReplacer(tokenizer).Replace(rawTokens);
 
 var builder = BuildCommand.ExportParsing(options);

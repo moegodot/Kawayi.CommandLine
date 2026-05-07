@@ -13,5 +13,5 @@ public interface IParsingExporter
     /// </summary>
     /// <param name="parsingOptions">The parsing options to attach to the exported builder.</param>
     /// <returns>The exported parsing builder.</returns>
-    static abstract IParsingBuilder ExportParsing(ParsingOptions parsingOptions);
+    static abstract CliSchemaBuilder ExportParsing(ParsingOptions parsingOptions);
 }

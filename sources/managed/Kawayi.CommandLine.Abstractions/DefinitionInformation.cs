@@ -14,7 +14,7 @@ public sealed record Document(
 );
 
 /// <summary>
-/// Represents the shared metadata for an argument, command, or option.
+/// Represents the shared metadata for a parameter, command, or option.
 /// </summary>
 /// <param name="Name">The command-line name metadata.</param>
 /// <param name="Document">The user-facing documentation.</param>

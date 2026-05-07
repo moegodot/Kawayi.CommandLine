@@ -31,6 +31,7 @@ public class ExportDocumentGeneratorTests
                 /// <remarks>
                 /// Property remarks
                 /// </remarks>
+                [Property]
                 public string Property { get; set; } = string.Empty;
 
                 /// <summary>
@@ -47,7 +48,7 @@ public class ExportDocumentGeneratorTests
 
         await Assert.That(result.Documents).IsNotNull();
         await Assert.That(result.Documents!["Property"]).EqualTo(new CommandDocument("Property summary", "Property remarks"));
-        await Assert.That(result.Documents["Field"]).EqualTo(new CommandDocument("Field summary", "Field remarks"));
+        await Assert.That(result.Documents.ContainsKey("Field")).IsFalse();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IDocumentExporter")).IsTrue();
     }
 
@@ -68,6 +69,7 @@ public class ExportDocumentGeneratorTests
                 /// <remarks>
                 /// Property remarks
                 /// </remarks>
+                [Property]
                 public string Property { get; set; } = string.Empty;
             }
             """;
@@ -93,14 +95,17 @@ public class ExportDocumentGeneratorTests
                 /// <summary>
                 /// Has summary only
                 /// </summary>
+                [Property]
                 public string SummaryOnly { get; set; } = string.Empty;
 
                 /// <remarks>
                 /// Has remarks only
                 /// </remarks>
+                [Property]
                 public string RemarksOnly { get; set; } = string.Empty;
 
-                public int NoDocumentation;
+                [Property]
+                public int NoDocumentation { get; set; }
             }
             """;
 
@@ -113,7 +118,7 @@ public class ExportDocumentGeneratorTests
     }
 
     [Test]
-    public async Task OnlySupportedVisibleMembers_AreExported()
+    public async Task TaggedProperties_AreExported_RegardlessOfVisibility()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -134,16 +139,19 @@ public class ExportDocumentGeneratorTests
                 /// <summary>
                 /// Public property
                 /// </summary>
+                [Property]
                 public string PublicProperty { get; set; } = string.Empty;
 
                 /// <summary>
                 /// Protected property
                 /// </summary>
+                [Property]
                 protected string ProtectedProperty { get; set; } = string.Empty;
 
                 /// <summary>
                 /// Protected internal property
                 /// </summary>
+                [Property]
                 protected internal string ProtectedInternalProperty { get; set; } = string.Empty;
 
                 /// <summary>
@@ -164,11 +172,13 @@ public class ExportDocumentGeneratorTests
                 /// <summary>
                 /// Private property
                 /// </summary>
+                [Property]
                 private string PrivateProperty { get; set; } = string.Empty;
 
                 /// <summary>
                 /// Internal property
                 /// </summary>
+                [Property]
                 internal string InternalProperty { get; set; } = string.Empty;
 
                 /// <summary>
@@ -186,15 +196,15 @@ public class ExportDocumentGeneratorTests
         var result = RunGenerator(source, "Fixtures.Command");
 
         await Assert.That(result.Documents).IsNotNull();
-        await Assert.That(result.Documents!.Count).EqualTo(6);
+        await Assert.That(result.Documents!.Count).EqualTo(5);
         await Assert.That(result.Documents.ContainsKey("PublicProperty")).IsTrue();
         await Assert.That(result.Documents.ContainsKey("ProtectedProperty")).IsTrue();
         await Assert.That(result.Documents.ContainsKey("ProtectedInternalProperty")).IsTrue();
-        await Assert.That(result.Documents.ContainsKey("PublicField")).IsTrue();
-        await Assert.That(result.Documents.ContainsKey("ProtectedField")).IsTrue();
-        await Assert.That(result.Documents.ContainsKey("ProtectedInternalField")).IsTrue();
-        await Assert.That(result.Documents.ContainsKey("PrivateProperty")).IsFalse();
-        await Assert.That(result.Documents.ContainsKey("InternalProperty")).IsFalse();
+        await Assert.That(result.Documents.ContainsKey("PrivateProperty")).IsTrue();
+        await Assert.That(result.Documents.ContainsKey("InternalProperty")).IsTrue();
+        await Assert.That(result.Documents.ContainsKey("PublicField")).IsFalse();
+        await Assert.That(result.Documents.ContainsKey("ProtectedField")).IsFalse();
+        await Assert.That(result.Documents.ContainsKey("ProtectedInternalField")).IsFalse();
         await Assert.That(result.Documents.ContainsKey("PrivateProtectedField")).IsFalse();
         await Assert.That(result.Documents.ContainsKey("BaseProperty")).IsFalse();
         await Assert.That(result.Documents.ContainsKey("Item")).IsFalse();

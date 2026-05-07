@@ -128,6 +128,40 @@ public sealed class ParsingBuilderExtensionsTests
     }
 
     [Test]
+    public async Task Merge_Structurally_Equal_Properties_Without_Override_Does_Not_Throw()
+    {
+        var firstVerbose = CreateProperty("verbose", typeof(bool));
+        var secondVerbose = CreateProperty("verbose", typeof(bool));
+        var first = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", firstVerbose));
+        var second = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", secondVerbose));
+
+        var merged = first.Merge(second, @override: false);
+
+        await Assert.That(merged.Properties.Count).IsEqualTo(1);
+        await Assert.That(merged.Properties["verbose"].LongName.Count).IsEqualTo(1);
+        await Assert.That(merged.Properties["verbose"].LongName.ContainsKey("verbose")).IsTrue();
+    }
+
+    [Test]
+    public async Task Merge_Different_RequirementIfNull_Properties_Without_Override_Throws()
+    {
+        var firstVerbose = CreateProperty("verbose", typeof(string), requirementIfNull: true);
+        var secondVerbose = CreateProperty("verbose", typeof(string));
+        var first = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", firstVerbose));
+        var second = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", secondVerbose));
+
+        await Assert.That(() => first.Merge(second, @override: false)).Throws<ArgumentException>();
+    }
+
+    [Test]
     public async Task Merge_Different_ParsingOptions_Without_Override_Throws()
     {
         var first = new ParsingBuilder(OptionsA);
@@ -277,6 +311,25 @@ public sealed class ParsingBuilderExtensionsTests
     }
 
     [Test]
+    public async Task Merge_Structurally_Equal_SubcommandDefinitions_Without_Override_Does_Not_Throw()
+    {
+        var firstServe = CreateCommand("serve", "run");
+        var secondServe = CreateCommand("serve", "run");
+        var first = new ParsingBuilder(
+            OptionsA,
+            subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", firstServe));
+        var second = new ParsingBuilder(
+            OptionsA,
+            subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", secondServe));
+
+        var merged = first.Merge(second, @override: false);
+
+        await Assert.That(merged.SubcommandDefinitions.Count).IsEqualTo(1);
+        await Assert.That(merged.SubcommandDefinitions["serve"].Alias.Count).IsEqualTo(1);
+        await Assert.That(merged.SubcommandDefinitions["serve"].Alias.ContainsKey("run")).IsTrue();
+    }
+
+    [Test]
     public async Task Merge_Subcommands_Recursively()
     {
         var serve = CreateCommand("serve");
@@ -293,7 +346,7 @@ public sealed class ParsingBuilderExtensionsTests
 
         var secondRootBuilder = new ParsingBuilder(
             OptionsA,
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         var merged = rootBuilder.Merge(secondRootBuilder);
 
@@ -308,6 +361,82 @@ public sealed class ParsingBuilderExtensionsTests
     }
 
     [Test]
+    public async Task Merge_First_Subcommand_Is_Cloned()
+    {
+        var childProperty = CreateProperty("format", typeof(string));
+        var childBuilder = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", childProperty));
+        var first = new ParsingBuilder(
+            OptionsA,
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
+        var second = new ParsingBuilder(OptionsA);
+
+        var merged = first.Merge(second);
+        childBuilder.Properties["after"] = CreateProperty("after", typeof(bool));
+
+        var mergedChild = merged.Subcommands["serve"];
+        await Assert.That(ReferenceEquals(mergedChild, childBuilder)).IsFalse();
+        await Assert.That(mergedChild.Properties.ContainsKey("format")).IsTrue();
+        await Assert.That(mergedChild.Properties.ContainsKey("after")).IsFalse();
+    }
+
+    [Test]
+    public async Task Merge_Second_Subcommand_Is_Cloned()
+    {
+        var childProperty = CreateProperty("format", typeof(string));
+        var childBuilder = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("format", childProperty));
+        var first = new ParsingBuilder(OptionsA);
+        var second = new ParsingBuilder(
+            OptionsA,
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
+
+        var merged = first.Merge(second);
+        childBuilder.Properties["after"] = CreateProperty("after", typeof(bool));
+
+        var mergedChild = merged.Subcommands["serve"];
+        await Assert.That(ReferenceEquals(mergedChild, childBuilder)).IsFalse();
+        await Assert.That(mergedChild.Properties.ContainsKey("format")).IsTrue();
+        await Assert.That(mergedChild.Properties.ContainsKey("after")).IsFalse();
+    }
+
+    [Test]
+    public async Task Merge_Recursive_Subcommand_Result_Does_Not_Share_Nested_Builders()
+    {
+        var firstNested = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("first", CreateProperty("first", typeof(string))));
+        var secondNested = new ParsingBuilder(
+            OptionsA,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("second", CreateProperty("second", typeof(string))));
+        var firstChild = new ParsingBuilder(
+            OptionsA,
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("watch", firstNested));
+        var secondChild = new ParsingBuilder(
+            OptionsA,
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("watch", secondNested));
+        var first = new ParsingBuilder(
+            OptionsA,
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", firstChild));
+        var second = new ParsingBuilder(
+            OptionsA,
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", secondChild));
+
+        var merged = first.Merge(second);
+        firstNested.Properties["after-first"] = CreateProperty("after-first", typeof(bool));
+        secondNested.Properties["after-second"] = CreateProperty("after-second", typeof(bool));
+
+        var mergedNested = merged.Subcommands["serve"].Subcommands["watch"];
+        await Assert.That(ReferenceEquals(mergedNested, firstNested)).IsFalse();
+        await Assert.That(ReferenceEquals(mergedNested, secondNested)).IsFalse();
+        await Assert.That(mergedNested.Properties.ContainsKey("second")).IsTrue();
+        await Assert.That(mergedNested.Properties.ContainsKey("after-first")).IsFalse();
+        await Assert.That(mergedNested.Properties.ContainsKey("after-second")).IsFalse();
+    }
+
+    [Test]
     public async Task Merge_Recursive_Subcommand_Conflicts_With_Override()
     {
         var serve = CreateCommand("serve");
@@ -316,7 +445,7 @@ public sealed class ParsingBuilderExtensionsTests
         var firstRoot = new ParsingBuilder(
             OptionsA,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add(
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add(
                 "serve",
                 new ParsingBuilder(
                     OptionsA,
@@ -324,7 +453,7 @@ public sealed class ParsingBuilderExtensionsTests
 
         var secondRoot = new ParsingBuilder(
             OptionsA,
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add(
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add(
                 "serve",
                 new ParsingBuilder(
                     OptionsA,
@@ -346,7 +475,7 @@ public sealed class ParsingBuilderExtensionsTests
         var firstRoot = new ParsingBuilder(
             OptionsA,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add(
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add(
                 "serve",
                 new ParsingBuilder(
                     OptionsA,
@@ -354,7 +483,7 @@ public sealed class ParsingBuilderExtensionsTests
 
         var secondRoot = new ParsingBuilder(
             OptionsA,
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add(
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add(
                 "serve",
                 new ParsingBuilder(
                     OptionsA,
@@ -433,7 +562,8 @@ public sealed class ParsingBuilderExtensionsTests
     private static PropertyDefinition CreateProperty(string name,
                                                      [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
                                                      Type type,
-                                                     ImmutableArray<string> longAliases = default)
+                                                     ImmutableArray<string> longAliases = default,
+                                                     bool requirementIfNull = false)
     {
         var longNames = ImmutableDictionary.CreateBuilder<string, NameWithVisibility>(StringComparer.Ordinal);
 
@@ -448,16 +578,17 @@ public sealed class ParsingBuilderExtensionsTests
             ImmutableDictionary<string, NameWithVisibility>.Empty,
             null,
             type,
-            false);
+            false,
+            requirementIfNull);
     }
 
-    private static ArgumentDefinition CreateArgument(string name,
+    private static ParameterDefinition CreateArgument(string name,
                                                      [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
                                                      Type type,
                                                      int minimum,
                                                      int maximum)
     {
-        return new ArgumentDefinition(
+        return new ParameterDefinition(
             CreateInformation(name),
             null,
             new ValueRange(minimum, maximum),

@@ -20,7 +20,8 @@ public sealed class ArgumentAttribute : SymbolAttribute
     /// <param name="position">The zero-based argument position.</param>
     /// <param name="require">Whether the argument is required.</param>
     /// <param name="visible">Whether the argument should be visible in help output.</param>
-    public ArgumentAttribute(int position, bool require = false, bool visible = true) : base(require, visible)
+    /// <param name="requirementIfNull">Whether the argument is required when its effective value is null.</param>
+    public ArgumentAttribute(int position, bool require = false, bool visible = true, bool requirementIfNull = false) : base(require, visible, requirementIfNull)
     {
         Position = position;
     }

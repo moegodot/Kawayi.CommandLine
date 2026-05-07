@@ -12,5 +12,5 @@ public interface IBindable
     /// Populates the current instance from parsing results.
     /// </summary>
     /// <param name="results">The parsed results to bind from.</param>
-    void Bind(IParsingResultCollection results);
+    void Bind(Cli results);
 }

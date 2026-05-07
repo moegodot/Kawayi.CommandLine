@@ -15,5 +15,5 @@ public interface ITokenizer
     /// </summary>
     /// <param name="input">The raw command-line values.</param>
     /// <returns>The parsed token sequence.</returns>
-    ImmutableArray<Token> Tokenlize(ImmutableArray<string> input);
+    ImmutableArray<Token> Tokenize(ImmutableArray<string> input);
 }

@@ -17,7 +17,11 @@ public sealed class SubcommandAttribute : SymbolAttribute
     /// <param name="global">Whether the subcommand should be present as parent command,
     /// this making the subcommand instantiated.
     /// </param>
-    public SubcommandAttribute(bool require = false, bool visible = true,bool global = false) : base(require, visible)
+    public SubcommandAttribute(bool require = false, bool visible = true, bool global = false) : base(require, visible)
     {
+        if (require)
+        {
+            throw new NotSupportedException("Required subcommands are not supported.");
+        }
     }
 }

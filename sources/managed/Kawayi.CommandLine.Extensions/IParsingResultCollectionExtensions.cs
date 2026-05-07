@@ -61,13 +61,13 @@ public static class IParsingResultCollectionExtensions
 
             if (result.TryGetValue(definition, out value))
             {
-                return true;
+                return DoesEffectiveValueSatisfyRequirement(definition, value);
             }
 
             if (definition.DefaultValueFactory is not null)
             {
                 value = definition.DefaultValueFactory(result);
-                return true;
+                return DoesEffectiveValueSatisfyRequirement(definition, value);
             }
 
             if (definition.Requirement)
@@ -77,7 +77,7 @@ public static class IParsingResultCollectionExtensions
             }
 
             value = GetClrDefault(definition.Type);
-            return true;
+            return DoesEffectiveValueSatisfyRequirement(definition, value);
         }
 
         /// <summary>
@@ -98,12 +98,15 @@ public static class IParsingResultCollectionExtensions
 
             if (result.TryGetValue(definition, out var explicitValue))
             {
+                EnsureEffectiveValueSatisfiesRequirement(definition, explicitValue);
                 return explicitValue;
             }
 
             if (definition.DefaultValueFactory is not null)
             {
-                return definition.DefaultValueFactory(result);
+                var defaultValue = definition.DefaultValueFactory(result);
+                EnsureEffectiveValueSatisfiesRequirement(definition, defaultValue);
+                return defaultValue;
             }
 
             if (definition.Requirement)
@@ -112,7 +115,23 @@ public static class IParsingResultCollectionExtensions
                     $"Required definition '{definition.Information.Name.Value}' does not have an explicit value or default factory.");
             }
 
-            return GetClrDefault(definition.Type);
+            var clrDefault = GetClrDefault(definition.Type);
+            EnsureEffectiveValueSatisfiesRequirement(definition, clrDefault);
+            return clrDefault;
+        }
+    }
+
+    private static bool DoesEffectiveValueSatisfyRequirement(TypedDefinition definition, object? value)
+    {
+        return definition.Requirement || !definition.RequirementIfNull || value is not null;
+    }
+
+    private static void EnsureEffectiveValueSatisfiesRequirement(TypedDefinition definition, object? value)
+    {
+        if (!DoesEffectiveValueSatisfyRequirement(definition, value))
+        {
+            throw new InvalidOperationException(
+                $"Required definition '{definition.Information.Name.Value}' does not have an explicit value or default factory.");
         }
     }
 

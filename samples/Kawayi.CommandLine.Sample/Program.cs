@@ -2,6 +2,7 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- --help
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --execution-mode background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format=json --env=region=cn --execution-mode=background
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --workspace-name atelier
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold -1
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch error --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
@@ -69,7 +70,7 @@ internal static class Program
         }
 
         var tokenizer = new Tokenizer();
-        var rawTokens = tokenizer.Tokenlize([.. effectiveArguments]);
+        var rawTokens = tokenizer.Tokenize([.. effectiveArguments]);
         var tokens = new ResponseFileReplacer(tokenizer).Replace(rawTokens);
 
         var builder = WorkspaceCommand.ExportParsing(parsingOptions);
@@ -114,7 +115,7 @@ internal static class Program
         output.WriteLine();
     }
 
-    private static void AugmentGeneratedBuilder(IParsingBuilder rootBuilder)
+    private static void AugmentGeneratedBuilder(CliSchemaBuilder rootBuilder)
     {
         rootBuilder.Properties["format"] = rootBuilder.Properties["format"] with
         {
@@ -137,6 +138,11 @@ internal static class Program
             DefaultValueFactory = static _ => "workspace"
         };
 
+        rootBuilder.Properties["workspace-name"] = rootBuilder.Properties["workspace-name"] with
+        {
+            DefaultValueFactory = static _ => "default-workspace"
+        };
+
         var serveBuilder = GetRequiredSubcommandBuilder(rootBuilder, "serve");
         serveBuilder.Properties["port"] = serveBuilder.Properties["port"] with
         {
@@ -155,7 +161,7 @@ internal static class Program
         };
     }
 
-    private static IParsingBuilder GetRequiredSubcommandBuilder(IParsingBuilder builder, string key)
+    private static CliSchemaBuilder GetRequiredSubcommandBuilder(CliSchemaBuilder builder, string key)
     {
         if (builder.Subcommands.TryGetValue(key, out var childBuilder) && childBuilder is not null)
         {
@@ -186,7 +192,7 @@ internal static class Program
         };
     }
 
-    private static IParsingBuilder CloneForScopedHelp(IParsingBuilder source)
+    private static CliSchemaBuilder CloneForScopedHelp(CliSchemaBuilder source)
     {
         var clone = new ParsingBuilder(source.ParsingOptions);
 
@@ -199,7 +205,8 @@ internal static class Program
         {
             clone.Properties[key] = property with
             {
-                Requirement = false
+                Requirement = false,
+                RequirementIfNull = false
             };
         }
 
@@ -208,7 +215,8 @@ internal static class Program
             clone.Argument.Add(argument with
             {
                 ValueRange = new ValueRange(0, argument.ValueRange.Maximum),
-                Requirement = false
+                Requirement = false,
+                RequirementIfNull = false
             });
         }
 
@@ -233,7 +241,7 @@ internal static class Program
                 versionFlagsDetected.FlagAction();
                 return 0;
             case ParsingFinished<IParsingResultCollection> parsingFinished:
-                PrintSuccess(parsingFinished.Result.Bind<WorkspaceCommand>(), Console.Out);
+                PrintSuccess(parsingFinished.Result.GetRootCommand().Bind<WorkspaceCommand>(), Console.Out);
                 return 0;
             case InvalidArgumentDetected invalidArgumentDetected:
                 PrintError("Invalid argument", $"{invalidArgumentDetected.Argument}: expected {invalidArgumentDetected.Expect}", invalidArgumentDetected.Exception);
@@ -280,6 +288,7 @@ internal static class Program
         output.WriteLine($"  Profile: {DescribeValue(command.Profile)}");
         output.WriteLine($"  Extras: {DescribeValue(command.Extras)}");
         output.WriteLine($"  Format: {DescribeValue(command.Format)}");
+        output.WriteLine($"  WorkspaceName: {DescribeValue(command.WorkspaceName)}");
         output.WriteLine($"  Verbose: {DescribeValue(command.Verbose)}");
         output.WriteLine($"  Retries: {DescribeValue(command.Retries)}");
         output.WriteLine($"  ExecutionMode: {DescribeValue(command.ExecutionMode)}");
@@ -462,6 +471,17 @@ public partial class WorkspaceCommand
     [LongAlias("output-format", visible: false)]
     [ShortAlias("f")]
     public string Format { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Workspace name
+    /// </summary>
+    /// <remarks>
+    /// Demonstrates RequirementIfNull with a nullable property that receives a non-null default during builder augmentation.
+    /// </remarks>
+    [Property(requirementIfNull: true, valueName: "name")]
+    [ValueRange(0, 1)]
+    [LongAlias("workspace-name")]
+    public string? WorkspaceName { get; set; }
 
     /// <summary>
     /// Retry count

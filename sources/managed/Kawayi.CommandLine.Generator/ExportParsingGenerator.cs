@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Kawayi.CommandLine.Generator;
@@ -15,177 +14,127 @@ namespace Kawayi.CommandLine.Generator;
 /// types annotated with <c>ExportParsingAttribute</c> or <c>CommandAttribute</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
-public sealed partial class ExportParsingGenerator : IIncrementalGenerator
+public sealed class ExportParsingGenerator : IIncrementalGenerator
 {
-    private const string ExportParsingAttributeMetadataName =
-        "Kawayi.CommandLine.Core.Attributes.ExportParsingAttribute";
-
-    private const string CommandAttributeMetadataName =
-        "Kawayi.CommandLine.Core.Attributes.CommandAttribute";
-
-    private const string ExportSymbolsAttributeMetadataName =
-        "Kawayi.CommandLine.Core.Attributes.ExportSymbolsAttribute";
-
-    private const string SymbolExporterMetadataName =
-        "Kawayi.CommandLine.Abstractions.ISymbolExporter";
-
-    private const string ParsingExporterMetadataName =
-        "Kawayi.CommandLine.Abstractions.IParsingExporter";
-
-    private const string ParsableMetadataName =
-        "Kawayi.CommandLine.Abstractions.IParsable";
-
-    private const string SubcommandAttributeMetadataName =
-        "Kawayi.CommandLine.Core.Attributes.SubcommandAttribute";
-
-    private static readonly DiagnosticDescriptor NonPartialDiagnostic = new(
-        id: "KCLG201",
-        title: "ExportParsing target must be partial",
-        messageFormat: "Type '{0}' must be declared partial to generate parsing exports",
-        category: "Kawayi.CommandLine.Generator",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    private static readonly DiagnosticDescriptor MissingSymbolExporterDiagnostic = new(
-        id: "KCLG202",
-        title: "ExportParsing target must provide symbols",
-        messageFormat: "Type '{0}' must implement ISymbolExporter, or use ExportSymbolsAttribute or CommandAttribute to generate symbol exports, before parsing exports can be generated",
-        category: "Kawayi.CommandLine.Generator",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    private static readonly DiagnosticDescriptor InvalidSubcommandExporterDiagnostic = new(
-        id: "KCLG203",
-        title: "Subcommand type must provide parsing exports",
-        messageFormat: "Subcommand member '{0}' must target a type that implements IParsingExporter or is annotated with ExportParsingAttribute or CommandAttribute",
-        category: "Kawayi.CommandLine.Generator",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    private static readonly SymbolDisplayFormat FullyQualifiedTypeFormat = new(
-        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-        miscellaneousOptions:
-        SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
-        SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
-        SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-
-    private static readonly SymbolDisplayFormat FullyQualifiedNonNullableTypeFormat = new(
-        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-        miscellaneousOptions:
-        SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
-        SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
-
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var targets = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => node is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
-                transform: static (syntaxContext, cancellationToken) =>
-                    CreateTarget(syntaxContext, cancellationToken))
-            .Where(static target => target is not null)
-            .Collect()
-            .SelectMany(static (targets, _) => DistinctTargets(targets));
+        var explicitTargets = context.SyntaxProvider.ForAttributeWithMetadataName(
+            MetadataNames.ExportParsingAttribute,
+            predicate: static (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax,
+            transform: static (syntaxContext, cancellationToken) =>
+                CreateTarget(syntaxContext, skipCommandTargets: true, cancellationToken));
 
-        context.RegisterSourceOutput(targets, static (productionContext, target) =>
-        {
-            Emit(productionContext, target!);
-        });
+        var commandTargets = context.SyntaxProvider.ForAttributeWithMetadataName(
+            MetadataNames.CommandAttribute,
+            predicate: static (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax,
+            transform: static (syntaxContext, cancellationToken) =>
+                CreateTarget(syntaxContext, skipCommandTargets: false, cancellationToken));
+
+        context.RegisterSourceOutput(explicitTargets.Where(static target => target is not null),
+                                     static (productionContext, target) => Emit(productionContext, target!));
+        context.RegisterSourceOutput(commandTargets.Where(static target => target is not null),
+                                     static (productionContext, target) => Emit(productionContext, target!));
     }
 
-    private static ExportTarget? CreateTarget(
-        GeneratorSyntaxContext context,
+    private static ParsingTarget? CreateTarget(
+        GeneratorAttributeSyntaxContext context,
+        bool skipCommandTargets,
         CancellationToken cancellationToken)
     {
-        if (context.Node is not TypeDeclarationSyntax declaration ||
-            context.SemanticModel.GetDeclaredSymbol(declaration, cancellationToken) is not INamedTypeSymbol typeSymbol)
+        if (context.TargetSymbol is not INamedTypeSymbol typeSymbol)
         {
             return null;
         }
 
-        if (!HasAttribute(typeSymbol, ExportParsingAttributeMetadataName) &&
-            !HasAttribute(typeSymbol, CommandAttributeMetadataName))
+        if (skipCommandTargets && CommandModel.HasAttribute(typeSymbol, MetadataNames.CommandAttribute))
         {
             return null;
         }
 
+        var model = CommandModel.Create(typeSymbol, cancellationToken);
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
-        var missingPartialSymbol = FindFirstMissingPartialType(typeSymbol);
-        var hasSymbolExporter =
-            typeSymbol.AllInterfaces.Any(static item => item.ToDisplayString() == SymbolExporterMetadataName) ||
-            HasAttribute(typeSymbol, ExportSymbolsAttributeMetadataName) ||
-            HasAttribute(typeSymbol, CommandAttributeMetadataName);
+        var subcommands = ImmutableArray.CreateBuilder<MemberModel>();
 
-        var subcommands = ImmutableArray.CreateBuilder<SubcommandBinding>();
-
-        foreach (var propertySymbol in typeSymbol.GetMembers().OfType<IPropertySymbol>())
+        foreach (var member in model.Members.Where(static item => item.Kind == MemberKind.Subcommand))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (propertySymbol.IsImplicitlyDeclared || propertySymbol.IsStatic || propertySymbol.IsIndexer)
+            if (!SupportsParsingExporter(member.PropertySymbol.Type, cancellationToken, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default)))
             {
+                diagnostics.Add(new DiagnosticInfo(GeneratorDescriptors.InvalidSubcommandExporter, member.Location, [member.MemberName]));
                 continue;
             }
 
-            var subcommandAttribute = GetAttribute(propertySymbol, SubcommandAttributeMetadataName);
-            if (subcommandAttribute is null)
-            {
-                continue;
-            }
-
-            if (!SupportsParsingExporter(propertySymbol.Type))
-            {
-                diagnostics.Add(new DiagnosticInfo(InvalidSubcommandExporterDiagnostic,
-                                                   propertySymbol.Locations.FirstOrDefault(),
-                                                   [propertySymbol.Name]));
-                continue;
-            }
-
-            subcommands.Add(new SubcommandBinding(propertySymbol.Name,
-                                                  propertySymbol.Type.ToDisplayString(FullyQualifiedNonNullableTypeFormat),
-                                                  GetAttributeBool(subcommandAttribute, 2, false)));
+            subcommands.Add(member);
         }
 
-        return new ExportTarget(typeSymbol,
-                                missingPartialSymbol,
-                                hasSymbolExporter,
-                                subcommands.ToImmutable(),
-                                diagnostics.ToImmutable());
+        return new ParsingTarget(model, subcommands.ToImmutable(), diagnostics.ToImmutable());
     }
 
-    private static bool SupportsParsingExporter(ITypeSymbol typeSymbol)
+    private static bool SupportsParsingExporter(
+        ITypeSymbol typeSymbol,
+        CancellationToken cancellationToken,
+        HashSet<ITypeSymbol> visited)
     {
         if (typeSymbol is not INamedTypeSymbol namedType)
         {
             return false;
         }
 
-        return namedType.AllInterfaces.Any(static item => item.ToDisplayString() == ParsingExporterMetadataName) ||
-               HasAttribute(namedType, ExportParsingAttributeMetadataName) ||
-               HasAttribute(namedType, CommandAttributeMetadataName);
+        if (CommandModel.ImplementsInterface(namedType, MetadataNames.ParsingExporter))
+        {
+            return true;
+        }
+
+        if (!CommandModel.HasAttribute(namedType, MetadataNames.ExportParsingAttribute) &&
+            !CommandModel.HasAttribute(namedType, MetadataNames.CommandAttribute))
+        {
+            return false;
+        }
+
+        if (!visited.Add(namedType))
+        {
+            return true;
+        }
+
+        var model = CommandModel.Create(namedType, cancellationToken);
+        if (model.MissingPartialSymbol is not null ||
+            !model.HasSymbolProvider ||
+            !model.CanGenerateSymbols)
+        {
+            return false;
+        }
+
+        foreach (var subcommand in model.Members.Where(static item => item.Kind == MemberKind.Subcommand))
+        {
+            if (!SupportsParsingExporter(subcommand.PropertySymbol.Type, cancellationToken, visited))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    private static void Emit(SourceProductionContext context, ExportTarget target)
+    private static void Emit(SourceProductionContext context, ParsingTarget target)
     {
-        if (target.MissingPartialSymbol is not null)
+        var model = target.Model;
+        if (model.MissingPartialSymbol is not null)
         {
-            var location = target.MissingPartialSymbol.Locations.FirstOrDefault();
             context.ReportDiagnostic(Diagnostic.Create(
-                NonPartialDiagnostic,
-                location,
-                target.MissingPartialSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
+                GeneratorDescriptors.ParsingNonPartial,
+                model.MissingPartialSymbol.Locations.FirstOrDefault(),
+                model.MissingPartialSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
             return;
         }
 
-        if (!target.HasSymbolExporter)
+        if (!model.HasSymbolProvider)
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                MissingSymbolExporterDiagnostic,
-                target.TypeSymbol.Locations.FirstOrDefault(),
-                target.TypeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
+                GeneratorDescriptors.MissingSymbolExporterForParsing,
+                model.TypeSymbol.Locations.FirstOrDefault(),
+                model.TypeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
         }
 
         foreach (var diagnostic in target.Diagnostics)
@@ -193,44 +142,63 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(diagnostic.Descriptor, diagnostic.Location, diagnostic.Arguments));
         }
 
-        if (!target.HasSymbolExporter || !target.Diagnostics.IsDefaultOrEmpty)
+        if (!model.HasSymbolProvider ||
+            !model.CanGenerateSymbols ||
+            target.Diagnostics.Any(static diagnostic => diagnostic.Descriptor.DefaultSeverity == DiagnosticSeverity.Error))
         {
             return;
         }
 
-        context.AddSource(GetHintName(target.TypeSymbol), SourceText.From(GenerateSource(target), Encoding.UTF8));
+        context.AddSource(
+            GeneratorSource.GetHintName(model.TypeSymbol, "ExportParsing"),
+            SourceText.From(GenerateSource(target), Encoding.UTF8));
     }
 
-    private static string GenerateSource(ExportTarget target)
+    private static string GenerateSource(ParsingTarget target)
     {
+        var model = target.Model;
         var builder = new StringBuilder();
         builder.AppendLine("// <auto-generated/>");
         builder.AppendLine("#nullable enable");
 
-        if (!target.TypeSymbol.ContainingNamespace.IsGlobalNamespace)
+        if (!model.TypeSymbol.ContainingNamespace.IsGlobalNamespace)
         {
-            builder.Append("namespace ").Append(target.TypeSymbol.ContainingNamespace.ToDisplayString()).AppendLine();
+            builder.Append("namespace ").Append(model.TypeSymbol.ContainingNamespace.ToDisplayString()).AppendLine();
             builder.AppendLine("{");
         }
 
-        var containingTypes = GetContainingTypes(target.TypeSymbol);
+        var containingTypes = GeneratorSource.GetContainingTypes(model.TypeSymbol);
         for (var i = 0; i < containingTypes.Length; i++)
         {
-            AppendIndentedLine(builder, i, BuildTypeDeclaration(containingTypes[i], includeInterface: false));
-            AppendIndentedLine(builder, i, "{");
+            GeneratorSource.AppendIndentedLine(builder, i, GeneratorSource.BuildTypeDeclaration(containingTypes[i], null, includeInterface: false));
+            GeneratorSource.AppendIndentedLine(builder, i, "{");
         }
 
-        AppendIndentedLine(builder, containingTypes.Length, BuildTypeDeclaration(target.TypeSymbol, includeInterface: true));
-        AppendIndentedLine(builder, containingTypes.Length, "{");
+        var interfaces = ImmutableArray.CreateBuilder<string>(2);
+        if (!model.ImplementsParsingExporter)
+        {
+            interfaces.Add("global::Kawayi.CommandLine.Abstractions.IParsingExporter");
+        }
+
+        if (!model.HasParsableSelfInterface)
+        {
+            interfaces.Add($"global::Kawayi.CommandLine.Abstractions.IParsable<{GeneratorSource.BuildSelfTypeReference(model.TypeSymbol)}>");
+        }
+
+        GeneratorSource.AppendIndentedLine(
+            builder,
+            containingTypes.Length,
+            GeneratorSource.BuildTypeDeclaration(model.TypeSymbol, interfaces.Count == 0 ? null : string.Join(", ", interfaces), includeInterface: true));
+        GeneratorSource.AppendIndentedLine(builder, containingTypes.Length, "{");
         AppendExportParsingMethod(builder, target, containingTypes.Length + 1);
-        AppendIndentedLine(builder, containingTypes.Length, "}");
+        GeneratorSource.AppendIndentedLine(builder, containingTypes.Length, "}");
 
         for (var i = containingTypes.Length - 1; i >= 0; i--)
         {
-            AppendIndentedLine(builder, i, "}");
+            GeneratorSource.AppendIndentedLine(builder, i, "}");
         }
 
-        if (!target.TypeSymbol.ContainingNamespace.IsGlobalNamespace)
+        if (!model.TypeSymbol.ContainingNamespace.IsGlobalNamespace)
         {
             builder.AppendLine("}");
         }
@@ -238,503 +206,199 @@ public sealed partial class ExportParsingGenerator : IIncrementalGenerator
         return builder.ToString();
     }
 
-    private static void AppendExportParsingMethod(StringBuilder builder, ExportTarget target, int indentLevel)
+    private static void AppendExportParsingMethod(StringBuilder builder, ParsingTarget target, int indentLevel)
     {
+        var model = target.Model;
         var typeNameLiteral = SymbolDisplay.FormatLiteral(
-            target.TypeSymbol.ToDisplayString(FullyQualifiedTypeFormat),
+            model.TypeSymbol.ToDisplayString(GeneratorFormats.FullyQualifiedNullableType),
             true);
-        var selfTypeReference = BuildSelfTypeReference(target.TypeSymbol);
-        var hasPromotedGlobalSubcommands = target.Subcommands.Any(static item => item.IsGlobal);
-        var hasRegularSubcommands = target.Subcommands.Any(static item => !item.IsGlobal);
+        var selfTypeReference = GeneratorSource.BuildSelfTypeReference(model.TypeSymbol);
+        var hasPromotedGlobalSubcommands = target.Subcommands.Any(static item => item.IsGlobalSubcommand);
+        var hasRegularSubcommands = target.Subcommands.Any(static item => !item.IsGlobalSubcommand);
 
-        AppendIndentedLine(builder, indentLevel, "/// <summary>");
-        AppendIndentedLine(builder, indentLevel, "/// Exports a mutable parsing builder for this command type.");
-        AppendIndentedLine(builder, indentLevel, "/// </summary>");
-        AppendIndentedLine(builder, indentLevel, "/// <param name=\"parsingOptions\">The parsing options to attach to the exported builder.</param>");
-        AppendIndentedLine(builder, indentLevel, "/// <returns>The exported parsing builder.</returns>");
-        AppendIndentedLine(
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <summary>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// Exports a mutable parsing builder for this command type.");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// </summary>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"parsingOptions\">The parsing options to attach to the exported builder.</param>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <returns>The exported parsing builder.</returns>");
+        GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
             "public static global::Kawayi.CommandLine.Abstractions.IParsingBuilder ExportParsing(global::Kawayi.CommandLine.Abstractions.ParsingOptions parsingOptions)");
-        AppendIndentedLine(builder, indentLevel, "{");
-        AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(parsingOptions);");
-        AppendIndentedLine(builder, indentLevel + 1, "var builder = new global::Kawayi.CommandLine.Core.ParsingBuilder(parsingOptions);");
-        AppendIndentedLine(builder, indentLevel + 1, "foreach (var symbol in Symbols)");
-        AppendIndentedLine(builder, indentLevel + 1, "{");
-        AppendIndentedLine(builder, indentLevel + 2, "switch (symbol)");
-        AppendIndentedLine(builder, indentLevel + 2, "{");
-        AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.ArgumentDefinition argument:");
-        AppendIndentedLine(builder, indentLevel + 4, "builder.Argument.Add(argument);");
-        AppendIndentedLine(builder, indentLevel + 4, "break;");
-        AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.PropertyDefinition property:");
-        AppendIndentedLine(builder, indentLevel + 4, "builder.Properties[property.Information.Name.Value] = property;");
-        AppendIndentedLine(builder, indentLevel + 4, "break;");
-        AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.CommandDefinition command:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(parsingOptions);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var builder = new global::Kawayi.CommandLine.Core.ParsingBuilder(parsingOptions);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var symbol in Symbols)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "switch (symbol)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.ArgumentDefinition argument:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "builder.Argument.Add(argument);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "break;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.PropertyDefinition property:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "builder.Properties[property.Information.Name.Value] = property;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "break;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.CommandDefinition command:");
         if (hasPromotedGlobalSubcommands)
         {
-            AppendIndentedLine(builder, indentLevel + 4, "if (!IsPromotedGlobalSubcommandName(command.Information.Name.Value))");
-            AppendIndentedLine(builder, indentLevel + 4, "{");
-            AppendIndentedLine(builder, indentLevel + 5, "builder.SubcommandDefinitions[command.Information.Name.Value] = command;");
-            AppendIndentedLine(builder, indentLevel + 4, "}");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "if (!IsPromotedGlobalSubcommandName(command.Information.Name.Value))");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "{");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 5, "builder.SubcommandDefinitions[command.Information.Name.Value] = command;");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "}");
         }
         else
         {
-            AppendIndentedLine(builder, indentLevel + 4, "builder.SubcommandDefinitions[command.Information.Name.Value] = command;");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "builder.SubcommandDefinitions[command.Information.Name.Value] = command;");
         }
-        AppendIndentedLine(builder, indentLevel + 4, "break;");
-        AppendIndentedLine(builder, indentLevel + 3, "default:");
-        AppendIndentedLine(
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "break;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "default:");
+        GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel + 4,
             $"throw new global::System.InvalidOperationException(\"Unsupported symbol type '\" + symbol.GetType().FullName + \"' was found in Symbols while exporting parsing metadata for \" + {typeNameLiteral} + \".\");");
-        AppendIndentedLine(builder, indentLevel + 2, "}");
-        AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
 
         foreach (var subcommand in target.Subcommands)
         {
-            if (subcommand.IsGlobal)
+            if (subcommand.IsGlobalSubcommand)
             {
-                AppendIndentedLine(
+                GeneratorSource.AppendIndentedLine(
                     builder,
                     indentLevel + 1,
-                    $"MergeGlobalSubcommand(builder, {subcommand.TypeName}.ExportParsing(parsingOptions), {SymbolDisplay.FormatLiteral(subcommand.TypeName, true)}, {SymbolDisplay.FormatLiteral(subcommand.PropertyName, true)});");
+                    $"MergeGlobalSubcommand(builder, {subcommand.TypeName}.ExportParsing(parsingOptions), {SymbolDisplay.FormatLiteral(subcommand.TypeName, true)}, {SymbolDisplay.FormatLiteral(subcommand.MemberName, true)});");
             }
             else
             {
-                var propertyNameExpression = GenerateCommandLineNameExpression(subcommand.PropertyName);
-                AppendIndentedLine(
+                GeneratorSource.AppendIndentedLine(
                     builder,
                     indentLevel + 1,
-                    $"builder.Subcommands[GetRequiredSubcommandKey(builder, {propertyNameExpression})] = {subcommand.TypeName}.ExportParsing(parsingOptions);");
+                    $"builder.Subcommands[GetRequiredSubcommandKey(builder, {subcommand.CommandLineName})] = {subcommand.TypeName}.ExportParsing(parsingOptions);");
             }
         }
 
-        AppendIndentedLine(builder, indentLevel + 1, "return builder;");
-        AppendIndentedLine(builder, indentLevel, "}");
-        AppendIndentedLine(builder, indentLevel, string.Empty);
-        AppendIndentedLine(builder, indentLevel, "/// <summary>");
-        AppendIndentedLine(builder, indentLevel, "/// Parses the supplied tokens by using the generated schema for this command type.");
-        AppendIndentedLine(builder, indentLevel, "/// </summary>");
-        AppendIndentedLine(builder, indentLevel, "/// <param name=\"options\">The parsing options for this operation.</param>");
-        AppendIndentedLine(builder, indentLevel, "/// <param name=\"arguments\">The tokens to parse.</param>");
-        AppendIndentedLine(builder, indentLevel, "/// <param name=\"initialState\">The initial state supplied to satisfy the IParsable contract.</param>");
-        AppendIndentedLine(builder, indentLevel, "/// <returns>The parsing result.</returns>");
-        AppendIndentedLine(
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return builder;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <summary>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// Parses the supplied tokens by using the generated schema for this command type.");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// </summary>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"options\">The parsing options for this operation.</param>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"arguments\">The tokens to parse.</param>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"initialState\">The initial state supplied to satisfy the IParsable contract.</param>");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <returns>The parsing result.</returns>");
+        GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
             $"public static global::Kawayi.CommandLine.Abstractions.ParsingResult CreateParsing(global::Kawayi.CommandLine.Abstractions.ParsingOptions options, global::System.Collections.Immutable.ImmutableArray<global::Kawayi.CommandLine.Abstractions.Token> arguments, {selfTypeReference} initialState)");
-        AppendIndentedLine(builder, indentLevel, "{");
-        AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(options);");
-        AppendIndentedLine(builder, indentLevel + 1, "_ = initialState;");
-        AppendIndentedLine(builder, indentLevel + 1, "var builder = ExportParsing(options);");
-        AppendIndentedLine(builder, indentLevel + 1, "var snapshot = builder.Build();");
-        AppendIndentedLine(builder,
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(options);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "_ = initialState;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var builder = ExportParsing(options);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var snapshot = builder.Build();");
+        GeneratorSource.AppendIndentedLine(builder,
                            indentLevel + 1,
                            "return global::Kawayi.CommandLine.Core.ParsingBuilder.CreateParsing(options, arguments, snapshot);");
-        AppendIndentedLine(builder, indentLevel, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
 
         if (target.Subcommands.Length == 0)
         {
             return;
         }
 
-        AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
         if (hasRegularSubcommands)
         {
-            AppendIndentedLine(
+            GeneratorSource.AppendIndentedLine(
                 builder,
                 indentLevel,
                 "private static string GetRequiredSubcommandKey(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, string commandName)");
-            AppendIndentedLine(builder, indentLevel, "{");
-            AppendIndentedLine(
+            GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+            GeneratorSource.AppendIndentedLine(
                 builder,
                 indentLevel + 1,
                 "if (builder.SubcommandDefinitions.TryGetValue(commandName, out var definition) && definition is not null)");
-            AppendIndentedLine(builder, indentLevel + 1, "{");
-            AppendIndentedLine(builder, indentLevel + 2, "return definition.Information.Name.Value;");
-            AppendIndentedLine(builder, indentLevel + 1, "}");
-            AppendIndentedLine(
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "return definition.Information.Name.Value;");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+            GeneratorSource.AppendIndentedLine(
                 builder,
                 indentLevel + 1,
                 $"throw new global::System.InvalidOperationException(\"Expected Symbols for \" + {typeNameLiteral} + \" to contain a CommandDefinition named '\" + commandName + \"' so the generated parsing exporter can attach the child parser.\");");
-            AppendIndentedLine(builder, indentLevel, "}");
+            GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
         }
 
-        if (hasPromotedGlobalSubcommands)
+        if (!hasPromotedGlobalSubcommands)
         {
-            AppendIndentedLine(builder, indentLevel, string.Empty);
-            AppendIndentedLine(
+            return;
+        }
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static bool IsPromotedGlobalSubcommandName(string commandName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return");
+        var globalSubcommands = target.Subcommands.Where(static item => item.IsGlobalSubcommand).ToArray();
+        for (var i = 0; i < globalSubcommands.Length; i++)
+        {
+            var suffix = i == globalSubcommands.Length - 1 ? ";" : " ||";
+            GeneratorSource.AppendIndentedLine(
                 builder,
-                indentLevel,
-                "private static bool IsPromotedGlobalSubcommandName(string commandName)");
-            AppendIndentedLine(builder, indentLevel, "{");
-            AppendIndentedLine(builder, indentLevel + 1, "return");
-            var globalSubcommands = target.Subcommands.Where(static item => item.IsGlobal).ToArray();
-            for (var i = 0; i < globalSubcommands.Length; i++)
-            {
-                var suffix = i == globalSubcommands.Length - 1 ? ";" : " ||";
-                AppendIndentedLine(
-                    builder,
-                    indentLevel + 2,
-                    $"global::System.StringComparer.Ordinal.Equals(commandName, {GenerateCommandLineNameExpression(globalSubcommands[i].PropertyName)}){suffix}");
-            }
-
-            AppendIndentedLine(builder, indentLevel, "}");
-            AppendIndentedLine(builder, indentLevel, string.Empty);
-            AppendIndentedLine(
-                builder,
-                indentLevel,
-                "private static void MergeGlobalSubcommand(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, global::Kawayi.CommandLine.Abstractions.IParsingBuilder childBuilder, string childTypeName, string memberName)");
-            AppendIndentedLine(builder, indentLevel, "{");
-            AppendIndentedLine(builder, indentLevel + 1, "foreach (var argument in childBuilder.Argument)");
-            AppendIndentedLine(builder, indentLevel + 1, "{");
-            AppendIndentedLine(builder, indentLevel + 2, "builder.Argument.Add(argument);");
-            AppendIndentedLine(builder, indentLevel + 1, "}");
-            AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in childBuilder.Properties)");
-            AppendIndentedLine(builder, indentLevel + 1, "{");
-            AppendIndentedLine(builder, indentLevel + 2, "if (builder.Properties.ContainsKey(pair.Key))");
-            AppendIndentedLine(builder, indentLevel + 2, "{");
-            AppendIndentedLine(
-                builder,
-                indentLevel + 3,
-                "throw new global::System.InvalidOperationException(\"Global subcommand member '\" + memberName + \"' from '\" + childTypeName + \"' cannot be promoted because property key '\" + pair.Key + \"' already exists.\");");
-            AppendIndentedLine(builder, indentLevel + 2, "}");
-            AppendIndentedLine(builder, indentLevel + 2, "builder.Properties[pair.Key] = pair.Value;");
-            AppendIndentedLine(builder, indentLevel + 1, "}");
-            AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in childBuilder.SubcommandDefinitions)");
-            AppendIndentedLine(builder, indentLevel + 1, "{");
-            AppendIndentedLine(builder, indentLevel + 2, "if (builder.SubcommandDefinitions.ContainsKey(pair.Key))");
-            AppendIndentedLine(builder, indentLevel + 2, "{");
-            AppendIndentedLine(
-                builder,
-                indentLevel + 3,
-                "throw new global::System.InvalidOperationException(\"Global subcommand member '\" + memberName + \"' from '\" + childTypeName + \"' cannot be promoted because subcommand key '\" + pair.Key + \"' already exists.\");");
-            AppendIndentedLine(builder, indentLevel + 2, "}");
-            AppendIndentedLine(builder, indentLevel + 2, "builder.SubcommandDefinitions[pair.Key] = pair.Value;");
-            AppendIndentedLine(builder, indentLevel + 1, "}");
-            AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in childBuilder.Subcommands)");
-            AppendIndentedLine(builder, indentLevel + 1, "{");
-            AppendIndentedLine(builder, indentLevel + 2, "if (builder.Subcommands.ContainsKey(pair.Key))");
-            AppendIndentedLine(builder, indentLevel + 2, "{");
-            AppendIndentedLine(
-                builder,
-                indentLevel + 3,
-                "throw new global::System.InvalidOperationException(\"Global subcommand member '\" + memberName + \"' from '\" + childTypeName + \"' cannot be promoted because nested builder key '\" + pair.Key + \"' already exists.\");");
-            AppendIndentedLine(builder, indentLevel + 2, "}");
-            AppendIndentedLine(builder, indentLevel + 2, "builder.Subcommands[pair.Key] = pair.Value;");
-            AppendIndentedLine(builder, indentLevel + 1, "}");
-            AppendIndentedLine(builder, indentLevel, "}");
+                indentLevel + 2,
+                $"global::System.StringComparer.Ordinal.Equals(commandName, {globalSubcommands[i].CommandLineName}){suffix}");
         }
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(
+            builder,
+            indentLevel,
+            "private static void MergeGlobalSubcommand(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, global::Kawayi.CommandLine.Abstractions.IParsingBuilder childBuilder, string childTypeName, string memberName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var argument in childBuilder.Argument)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "builder.Argument.Add(argument);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in childBuilder.Properties)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "if (builder.Properties.ContainsKey(pair.Key))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "throw new global::System.InvalidOperationException(\"Global subcommand member '\" + memberName + \"' from '\" + childTypeName + \"' cannot be promoted because property key '\" + pair.Key + \"' already exists.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "builder.Properties[pair.Key] = pair.Value;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in childBuilder.SubcommandDefinitions)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "if (builder.SubcommandDefinitions.ContainsKey(pair.Key))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "throw new global::System.InvalidOperationException(\"Global subcommand member '\" + memberName + \"' from '\" + childTypeName + \"' cannot be promoted because subcommand key '\" + pair.Key + \"' already exists.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "builder.SubcommandDefinitions[pair.Key] = pair.Value;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in childBuilder.Subcommands)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "if (builder.Subcommands.ContainsKey(pair.Key))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "throw new global::System.InvalidOperationException(\"Global subcommand member '\" + memberName + \"' from '\" + childTypeName + \"' cannot be promoted because nested builder key '\" + pair.Key + \"' already exists.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "builder.Subcommands[pair.Key] = pair.Value;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
     }
 
-    private static ImmutableArray<INamedTypeSymbol> GetContainingTypes(INamedTypeSymbol typeSymbol)
+    private sealed class ParsingTarget
     {
-        if (typeSymbol.ContainingType is null)
+        public ParsingTarget(CommandModel model, ImmutableArray<MemberModel> subcommands, ImmutableArray<DiagnosticInfo> diagnostics)
         {
-            return [];
-        }
-
-        var builder = ImmutableArray.CreateBuilder<INamedTypeSymbol>();
-        for (var current = typeSymbol.ContainingType; current is not null; current = current.ContainingType)
-        {
-            builder.Add(current);
-        }
-
-        builder.Reverse();
-        return builder.ToImmutable();
-    }
-
-    private static string BuildTypeDeclaration(INamedTypeSymbol typeSymbol, bool includeInterface)
-    {
-        var builder = new StringBuilder();
-        builder.Append(GetAccessibilityText(typeSymbol.DeclaredAccessibility));
-        builder.Append(' ');
-
-        if (typeSymbol.IsStatic)
-        {
-            builder.Append("static ");
-        }
-        else
-        {
-            if (typeSymbol.IsAbstract)
-            {
-                builder.Append("abstract ");
-            }
-
-            if (typeSymbol.IsSealed)
-            {
-                builder.Append("sealed ");
-            }
-        }
-
-        builder.Append("partial ");
-        builder.Append(typeSymbol.IsRecord ? "record " : "class ");
-        builder.Append(typeSymbol.Name);
-
-        if (typeSymbol.TypeParameters.Length > 0)
-        {
-            builder.Append('<');
-            builder.Append(string.Join(", ", typeSymbol.TypeParameters.Select(static parameter => parameter.Name)));
-            builder.Append('>');
-        }
-
-        if (includeInterface)
-        {
-            var interfaces = ImmutableArray.CreateBuilder<string>(2);
-
-            if (!typeSymbol.AllInterfaces.Any(static item => item.ToDisplayString() == ParsingExporterMetadataName))
-            {
-                interfaces.Add("global::Kawayi.CommandLine.Abstractions.IParsingExporter");
-            }
-
-            if (!HasParsableSelfInterface(typeSymbol))
-            {
-                interfaces.Add($"global::Kawayi.CommandLine.Abstractions.IParsable<{BuildSelfTypeReference(typeSymbol)}>");
-            }
-
-            if (interfaces.Count > 0)
-            {
-                builder.Append(" : ");
-                builder.Append(string.Join(", ", interfaces));
-            }
-        }
-
-        foreach (var typeParameter in typeSymbol.TypeParameters)
-        {
-            var constraintClause = BuildConstraintClause(typeParameter);
-            if (!string.IsNullOrEmpty(constraintClause))
-            {
-                builder.Append(' ');
-                builder.Append(constraintClause);
-            }
-        }
-
-        return builder.ToString();
-    }
-
-    private static bool HasParsableSelfInterface(INamedTypeSymbol typeSymbol)
-    {
-        foreach (var implementedInterface in typeSymbol.AllInterfaces)
-        {
-            if (!string.Equals(implementedInterface.OriginalDefinition.ToDisplayString(),
-                               ParsableMetadataName + "<T>",
-                               StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (implementedInterface.TypeArguments.Length == 1 &&
-                SymbolEqualityComparer.Default.Equals(implementedInterface.TypeArguments[0], typeSymbol))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string BuildSelfTypeReference(INamedTypeSymbol typeSymbol)
-    {
-        if (typeSymbol.TypeParameters.Length == 0)
-        {
-            return typeSymbol.Name;
-        }
-
-        return $"{typeSymbol.Name}<{string.Join(", ", typeSymbol.TypeParameters.Select(static parameter => parameter.Name))}>";
-    }
-
-    private static string GenerateCommandLineNameExpression(string memberName)
-    {
-        return $"global::Kawayi.CommandLine.Abstractions.CaseConverter.Pascal2Kebab({SymbolDisplay.FormatLiteral(memberName, true)})";
-    }
-
-    private static string BuildConstraintClause(ITypeParameterSymbol typeParameter)
-    {
-        var constraints = new List<string>();
-        if (typeParameter.HasUnmanagedTypeConstraint)
-        {
-            constraints.Add("unmanaged");
-        }
-        else if (typeParameter.HasValueTypeConstraint)
-        {
-            constraints.Add("struct");
-        }
-        else if (typeParameter.HasReferenceTypeConstraint)
-        {
-            constraints.Add(
-                typeParameter.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated
-                    ? "class?"
-                    : "class");
-        }
-        else if (typeParameter.HasNotNullConstraint)
-        {
-            constraints.Add("notnull");
-        }
-
-        constraints.AddRange(typeParameter.ConstraintTypes.Select(static type => type.ToDisplayString(FullyQualifiedTypeFormat)));
-
-        if (typeParameter.HasConstructorConstraint)
-        {
-            constraints.Add("new()");
-        }
-
-        return constraints.Count == 0
-            ? string.Empty
-            : $"where {typeParameter.Name} : {string.Join(", ", constraints)}";
-    }
-
-    private static string GetAccessibilityText(Accessibility accessibility) =>
-        accessibility switch
-        {
-            Accessibility.Public => "public",
-            Accessibility.Private => "private",
-            Accessibility.Internal => "internal",
-            Accessibility.Protected => "protected",
-            Accessibility.ProtectedAndInternal => "private protected",
-            Accessibility.ProtectedOrInternal => "protected internal",
-            _ => "internal",
-        };
-
-    private static AttributeData? GetAttribute(ISymbol symbol, string metadataName)
-    {
-        return symbol.GetAttributes().FirstOrDefault(attribute =>
-            attribute.AttributeClass?.ToDisplayString() == metadataName);
-    }
-
-    private static bool HasAttribute(ISymbol symbol, string metadataName)
-    {
-        return GetAttribute(symbol, metadataName) is not null;
-    }
-
-    private static bool GetAttributeBool(AttributeData attribute, int index, bool defaultValue)
-    {
-        if (attribute.ConstructorArguments.Length <= index)
-        {
-            return defaultValue;
-        }
-
-        return attribute.ConstructorArguments[index].Value is bool value ? value : defaultValue;
-    }
-
-    private static INamedTypeSymbol? FindFirstMissingPartialType(INamedTypeSymbol typeSymbol)
-    {
-        for (var current = typeSymbol; current is not null; current = current.ContainingType)
-        {
-            if (!IsPartial(current))
-            {
-                return current;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsPartial(INamedTypeSymbol typeSymbol)
-    {
-        foreach (var syntaxReference in typeSymbol.DeclaringSyntaxReferences)
-        {
-            if (syntaxReference.GetSyntax() is TypeDeclarationSyntax declaration &&
-                declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void AppendIndentedLine(StringBuilder builder, int indentLevel, string text)
-    {
-        builder.Append(' ', indentLevel * 4);
-        builder.AppendLine(text);
-    }
-
-    private static string GetHintName(INamedTypeSymbol typeSymbol)
-    {
-        var metadataName = typeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-        var sanitizedName = new string(metadataName.Select(static character =>
-            char.IsLetterOrDigit(character) ? character : '_').ToArray());
-        return $"{sanitizedName}.ExportParsing.g.cs";
-    }
-
-    private static ImmutableArray<ExportTarget> DistinctTargets(ImmutableArray<ExportTarget?> targets)
-    {
-        var builder = ImmutableArray.CreateBuilder<ExportTarget>(targets.Length);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var target in targets)
-        {
-            if (target is null)
-            {
-                continue;
-            }
-
-            var key = target.TypeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-            if (seen.Add(key))
-            {
-                builder.Add(target);
-            }
-        }
-
-        return builder.ToImmutable();
-    }
-
-    private sealed class ExportTarget
-    {
-        public ExportTarget(
-            INamedTypeSymbol typeSymbol,
-            INamedTypeSymbol? missingPartialSymbol,
-            bool hasSymbolExporter,
-            ImmutableArray<SubcommandBinding> subcommands,
-            ImmutableArray<DiagnosticInfo> diagnostics)
-        {
-            TypeSymbol = typeSymbol;
-            MissingPartialSymbol = missingPartialSymbol;
-            HasSymbolExporter = hasSymbolExporter;
+            Model = model;
             Subcommands = subcommands;
             Diagnostics = diagnostics;
         }
 
-        public INamedTypeSymbol TypeSymbol { get; }
+        public CommandModel Model { get; }
 
-        public INamedTypeSymbol? MissingPartialSymbol { get; }
-
-        public bool HasSymbolExporter { get; }
-
-        public ImmutableArray<SubcommandBinding> Subcommands { get; }
+        public ImmutableArray<MemberModel> Subcommands { get; }
 
         public ImmutableArray<DiagnosticInfo> Diagnostics { get; }
-    }
-
-    private sealed class SubcommandBinding
-    {
-        public SubcommandBinding(string propertyName, string typeName, bool isGlobal)
-        {
-            PropertyName = propertyName;
-            TypeName = typeName;
-            IsGlobal = isGlobal;
-        }
-
-        public string PropertyName { get; }
-
-        public string TypeName { get; }
-
-        public bool IsGlobal { get; }
-    }
-
-    private sealed class DiagnosticInfo
-    {
-        public DiagnosticInfo(DiagnosticDescriptor descriptor, Location? location, object?[] arguments)
-        {
-            Descriptor = descriptor;
-            Location = location;
-            Arguments = arguments;
-        }
-
-        public DiagnosticDescriptor Descriptor { get; }
-
-        public Location? Location { get; }
-
-        public object?[] Arguments { get; }
     }
 }

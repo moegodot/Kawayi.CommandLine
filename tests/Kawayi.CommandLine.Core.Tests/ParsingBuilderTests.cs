@@ -280,7 +280,7 @@ public sealed class ParsingBuilderTests
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
             properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -333,7 +333,7 @@ public sealed class ParsingBuilderTests
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
             argument: [path],
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -369,7 +369,7 @@ public sealed class ParsingBuilderTests
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
             properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", verbose),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -405,7 +405,7 @@ public sealed class ParsingBuilderTests
         var rootBuilder = new ParsingBuilder(
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -522,11 +522,11 @@ public sealed class ParsingBuilderTests
         var serveBuilder = new ParsingBuilder(
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("watch", watch),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("watch", watchBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("watch", watchBuilder));
         var rootBuilder = new ParsingBuilder(
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", serveBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", serveBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -612,6 +612,74 @@ public sealed class ParsingBuilderTests
         }
 
         await Assert.That(invalid.Argument).IsEqualTo("path");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_When_RequirementIfNull_Property_Resolves_To_Null()
+    {
+        var name = CreateProperty("name", typeof(string), requirementIfNull: true);
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("name", name));
+
+        var result = Parse(builder, []);
+
+        if (result is not InvalidArgumentDetected invalid)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalid.Argument).IsEqualTo("name");
+    }
+
+    [Test]
+    public async Task CreateParsing_Returns_InvalidArgument_When_RequirementIfNull_Argument_Resolves_To_Null()
+    {
+        var name = CreateArgument("name", typeof(string), 0, 1, requirementIfNull: true);
+        var builder = new ParsingBuilder(DefaultOptions, argument: [name]);
+
+        var result = Parse(builder, []);
+
+        if (result is not InvalidArgumentDetected invalid)
+        {
+            throw new InvalidOperationException($"Expected {nameof(InvalidArgumentDetected)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(invalid.Argument).IsEqualTo("name");
+    }
+
+    [Test]
+    public async Task CreateParsing_Allows_RequirementIfNull_When_Default_Is_Not_Null()
+    {
+        var name = CreateProperty("name", typeof(string), requirementIfNull: true) with
+        {
+            DefaultValueFactory = static _ => "fallback"
+        };
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("name", name));
+
+        var result = Parse(builder, []);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValue<string>(values, name)).IsEqualTo("fallback");
+    }
+
+    [Test]
+    public async Task CreateParsing_Ignores_RequirementIfNull_When_Definition_Is_Required()
+    {
+        var name = CreateProperty("name", typeof(string), required: true, requirementIfNull: true) with
+        {
+            DefaultValueFactory = static _ => null!
+        };
+        var builder = new ParsingBuilder(
+            DefaultOptions,
+            properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("name", name));
+
+        var result = Parse(builder, []);
+        var values = AssertFinishedCollection(result);
+
+        await Assert.That(GetEffectiveValueOrDefault(values, name)).IsNull();
     }
 
     [Test]
@@ -739,7 +807,7 @@ public sealed class ParsingBuilderTests
             DefaultOptions,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
             argument: [files, target],
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -1055,6 +1123,29 @@ public sealed class ParsingBuilderTests
     }
 
     [Test]
+    public async Task ParsingResultCollectionExtensions_Apply_RequirementIfNull_To_Effective_Values()
+    {
+        var missingProperty = CreateProperty("missing", typeof(string), requirementIfNull: true);
+        var defaultedProperty = CreateProperty("defaulted", typeof(string), requirementIfNull: true) with
+        {
+            DefaultValueFactory = static _ => "fallback"
+        };
+        var scope = new ParsingScopeMetadata([], [missingProperty, defaultedProperty]);
+        var collection = new ParsingResultCollection(
+            null,
+            null,
+            scope,
+            ImmutableDictionary<TypedDefinition, object?>.Empty);
+
+        await Assert.That(collection.TryGetEffectiveValue(missingProperty, out var missingValue)).IsFalse();
+        await Assert.That(missingValue).IsNull();
+        await Assert.That(() => collection.GetEffectiveValueOrDefault(missingProperty)).Throws<InvalidOperationException>();
+        await Assert.That(collection.TryGetEffectiveValue(defaultedProperty, out var defaultedValue)).IsTrue();
+        await Assert.That(defaultedValue).IsEqualTo("fallback");
+        await Assert.That(collection.GetEffectiveValueOrDefault(defaultedProperty)).IsEqualTo("fallback");
+    }
+
+    [Test]
     public async Task CreateParsing_Returns_HelpFlag_With_Root_Scoped_Output_And_No_Ansi_When_Style_Is_Disabled()
     {
         var writer = new StringWriter();
@@ -1075,7 +1166,7 @@ public sealed class ParsingBuilderTests
                 .Add("verbose", verbose)
                 .Add("format", format),
             argument: [input],
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         var result = Parse(builder, [new LongOptionToken("help")]);
 
@@ -1116,7 +1207,7 @@ public sealed class ParsingBuilderTests
         var builder = new ParsingBuilder(
             options,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         var result = Parse(builder, [new LongOptionToken("help")]);
 
@@ -1152,7 +1243,7 @@ public sealed class ParsingBuilderTests
             options,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
             properties: ImmutableDictionary<string, PropertyDefinition>.Empty.Add("verbose", rootProperty),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", childBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", childBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -1518,11 +1609,11 @@ public sealed class ParsingBuilderTests
         var serveBuilder = new ParsingBuilder(
             options,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("watch", watch),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("watch", watchBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("watch", watchBuilder));
         var rootBuilder = new ParsingBuilder(
             options,
             subcommandDefinitions: ImmutableDictionary<string, CommandDefinition>.Empty.Add("serve", serve),
-            subcommands: ImmutableDictionary<string, IParsingBuilder>.Empty.Add("serve", serveBuilder));
+            subcommands: ImmutableDictionary<string, CliSchemaBuilder>.Empty.Add("serve", serveBuilder));
 
         ImmutableArray<Token> arguments =
         [
@@ -1821,7 +1912,8 @@ public sealed class ParsingBuilderTests
                                                      ImmutableArray<string> shortAliases = default,
                                                      PossibleValues? possibleValues = null,
                                                      string? valueName = null,
-                                                     ValueRange? numArgs = null)
+                                                     ValueRange? numArgs = null,
+                                                     bool requirementIfNull = false)
     {
         var longNames = ImmutableDictionary.CreateBuilder<string, NameWithVisibility>(StringComparer.Ordinal);
         var shortNames = ImmutableDictionary.CreateBuilder<string, NameWithVisibility>(StringComparer.Ordinal);
@@ -1842,7 +1934,8 @@ public sealed class ParsingBuilderTests
             shortNames.ToImmutable(),
             null,
             type,
-            required)
+            required,
+            requirementIfNull)
         {
             NumArgs = numArgs ?? ValueRange.ZeroOrMore,
             ValueName = valueName,
@@ -1850,19 +1943,21 @@ public sealed class ParsingBuilderTests
         };
     }
 
-    private static ArgumentDefinition CreateArgument(string name,
+    private static ParameterDefinition CreateArgument(string name,
                                                      [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
                                                      Type type,
                                                      int minimum,
                                                      int maximum,
-                                                     bool required = false)
+                                                     bool required = false,
+                                                     bool requirementIfNull = false)
     {
-        return new ArgumentDefinition(
+        return new ParameterDefinition(
             CreateInformation(name),
             null,
             new ValueRange(minimum, maximum),
             type,
-            required);
+            required,
+            requirementIfNull);
     }
 
     private static CommandDefinition CreateCommand(string name)

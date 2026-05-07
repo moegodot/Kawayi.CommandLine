@@ -15,10 +15,12 @@ public abstract class SymbolAttribute : Attribute
     /// </summary>
     /// <param name="require">Whether the symbol is required.</param>
     /// <param name="visible">Whether the symbol should be visible in help output.</param>
-    public SymbolAttribute(bool require = false, bool visible = true)
+    /// <param name="requirementIfNull">Whether the symbol is required when its effective value is null.</param>
+    public SymbolAttribute(bool require = false, bool visible = true, bool requirementIfNull = false)
     {
         Visible = visible;
         Require = require;
+        RequirementIfNull = requirementIfNull;
     }
 
     /// <summary>
@@ -30,4 +32,9 @@ public abstract class SymbolAttribute : Attribute
     /// Gets whether the symbol is required.
     /// </summary>
     public bool Require { get; }
+
+    /// <summary>
+    /// Gets whether the symbol is required when its effective value is null.
+    /// </summary>
+    public bool RequirementIfNull { get; }
 }

@@ -59,9 +59,9 @@ public class ExportSymbolsGeneratorTests
         await Assert.That(symbols.Length).IsEqualTo(3);
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ISymbolExporter")).IsTrue();
 
-        if (symbols[0] is not ArgumentDefinition argument)
+        if (symbols[0] is not ParameterDefinition argument)
         {
-            throw new InvalidOperationException($"Expected first symbol to be {nameof(ArgumentDefinition)}.");
+            throw new InvalidOperationException($"Expected first symbol to be {nameof(ParameterDefinition)}.");
         }
 
         if (symbols[1] is not PropertyDefinition property)
@@ -167,7 +167,7 @@ public class ExportSymbolsGeneratorTests
 
         var result = RunGenerator(source, "Fixtures.Command");
         var symbols = GetSymbols(result, "Fixtures.Command");
-        var requestId = symbols.OfType<ArgumentDefinition>().Single();
+        var requestId = symbols.OfType<ParameterDefinition>().Single();
         var httpServer = symbols.OfType<PropertyDefinition>().Single();
         var serveCommand = symbols.OfType<CommandDefinition>().Single();
 
@@ -219,6 +219,125 @@ public class ExportSymbolsGeneratorTests
         await Assert.That(diagnostics.Count(static item => item.Id == "KCLG111")).IsEqualTo(1);
         await Assert.That(diagnostics.Single(static item => item.Id == "KCLG111").Severity).IsEqualTo(DiagnosticSeverity.Warning);
         await Assert.That(diagnostics.Single(static item => item.Id == "KCLG111").GetMessage()).Contains("Serve");
+    }
+
+    [Test]
+    public async Task RequirementIfNull_Is_Exported_For_Nullable_Arguments_And_Properties()
+    {
+        const string source = """
+            #nullable enable
+
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Input", new Document("Input summary", "Input help"))
+                        .Add("Count", new Document("Count summary", "Count help"));
+
+                [Argument(0, requirementIfNull: true)]
+                [ValueRange(0, 1)]
+                public string? Input { get; set; }
+
+                [Property(requirementIfNull: true)]
+                [LongAlias("count")]
+                public int? Count { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var symbols = GetSymbols(result, "Fixtures.Command");
+        var diagnostics = GetGeneratorDiagnostics(result);
+        var argument = symbols.OfType<ParameterDefinition>().Single();
+        var property = symbols.OfType<PropertyDefinition>().Single();
+
+        await Assert.That(argument.Requirement).IsFalse();
+        await Assert.That(argument.RequirementIfNull).IsTrue();
+        await Assert.That(property.Requirement).IsFalse();
+        await Assert.That(property.RequirementIfNull).IsTrue();
+        await Assert.That(diagnostics.Any(static item => item.Id == "KCLG112")).IsFalse();
+    }
+
+    [Test]
+    public async Task RequirementIfNull_On_NonNullable_Member_ReportsDiagnostic()
+    {
+        const string source = """
+            #nullable enable
+
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Input", new Document("Input summary", "Input help"))
+                        .Add("Count", new Document("Count summary", "Count help"));
+
+                [Argument(0, requirementIfNull: true)]
+                [ValueRange(0, 1)]
+                public int Input { get; set; }
+
+                [Property(requirementIfNull: true)]
+                [LongAlias("count")]
+                public string Count { get; set; } = string.Empty;
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
+        var diagnostics = GetGeneratorDiagnostics(result);
+
+        await Assert.That(diagnostics.Count(static item => item.Id == "KCLG112")).IsEqualTo(2);
+        await Assert.That(diagnostics.All(static item => item.Id != "KCLG112" || item.Severity == DiagnosticSeverity.Error)).IsTrue();
+    }
+
+    [Test]
+    public async Task RequirementIfNull_On_NullableOblivious_Reference_Member_Does_Not_ReportDiagnostic()
+    {
+        const string source = """
+            #nullable disable
+
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Input", new Document("Input summary", "Input help"))
+                        .Add("Name", new Document("Name summary", "Name help"));
+
+                [Argument(0, requirementIfNull: true)]
+                [ValueRange(0, 1)]
+                public string Input { get; set; }
+
+                [Property(requirementIfNull: true)]
+                [LongAlias("name")]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var diagnostics = GetGeneratorDiagnostics(result);
+        var symbols = GetSymbols(result, "Fixtures.Command");
+
+        await Assert.That(diagnostics.Any(static item => item.Id == "KCLG112")).IsFalse();
+        await Assert.That(symbols.OfType<ParameterDefinition>().Single().RequirementIfNull).IsTrue();
+        await Assert.That(symbols.OfType<PropertyDefinition>().Single().RequirementIfNull).IsTrue();
     }
 
     [Test]
@@ -344,7 +463,7 @@ public class ExportSymbolsGeneratorTests
 
         var result = RunGenerator(source, "Fixtures.Command");
         var symbols = GetSymbols(result, "Fixtures.Command");
-        var input = symbols.OfType<ArgumentDefinition>().Single(static argument => argument.Information.Name.Value == "input");
+        var input = symbols.OfType<ParameterDefinition>().Single(static argument => argument.Information.Name.Value == "input");
         var count = symbols.OfType<PropertyDefinition>().Single(static property => property.Information.Name.Value == "count");
         var secret = symbols.OfType<PropertyDefinition>().Single(static property => property.Information.Name.Value == "secret");
 
@@ -798,7 +917,7 @@ public class ExportSymbolsGeneratorTests
     }
 
     [Test]
-    public async Task Duplicate_Position_And_Alias_Conflicts_ReportDiagnostics()
+    public async Task Duplicate_Position_ReportsDiagnostic_And_CrossKind_Alias_Does_Not_Conflict()
     {
         const string source = """
             using System.Collections.Immutable;
@@ -843,11 +962,111 @@ public class ExportSymbolsGeneratorTests
         var diagnostics = GetGeneratorDiagnostics(result);
 
         await Assert.That(diagnostics.Any(static item => item.Id == "KCLG107")).IsTrue();
-        await Assert.That(diagnostics.Any(static item => item.Id == "KCLG108")).IsTrue();
+        await Assert.That(diagnostics.Any(static item => item.Id == "KCLG108")).IsFalse();
     }
 
     [Test]
-    public async Task Missing_Document_Entry_Fails_When_Symbols_Are_Accessed()
+    public async Task Duplicate_Aliases_And_Surface_Names_ReportDiagnostics()
+    {
+        const string source = """
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            public sealed class ChildCommand
+            {
+            }
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("FirstName", new Document("", ""))
+                        .Add("First_Name", new Document("", ""))
+                        .Add("Mode", new Document("", ""))
+                        .Add("Format", new Document("", ""))
+                        .Add("Force", new Document("", ""))
+                        .Add("Flag", new Document("", ""))
+                        .Add("Serve", new Document("", ""))
+                        .Add("Watch", new Document("", ""));
+
+                [Property]
+                [LongAlias("mode")]
+                public bool FirstName { get; set; }
+
+                [Property]
+                [LongAlias("name")]
+                public bool First_Name { get; set; }
+
+                [Property]
+                [LongAlias("dup")]
+                public bool Mode { get; set; }
+
+                [Property]
+                [LongAlias("dup")]
+                public bool Format { get; set; }
+
+                [Property]
+                [ShortAlias("f")]
+                public bool Force { get; set; }
+
+                [Property]
+                [ShortAlias("f")]
+                public bool Flag { get; set; }
+
+                [Subcommand]
+                public ChildCommand Serve { get; } = new();
+
+                [Subcommand]
+                [Alias("serve")]
+                public ChildCommand Watch { get; } = new();
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
+        var diagnostics = GetGeneratorDiagnostics(result);
+
+        await Assert.That(diagnostics.Count(static item => item.Id == "KCLG108")).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task Required_Subcommand_ReportsDiagnostic_And_Attribute_Constructor_Throws()
+    {
+        const string source = """
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            public sealed class ChildCommand
+            {
+            }
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Serve", new Document("", ""));
+
+                [Subcommand(require: true)]
+                public ChildCommand? Serve { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
+        var diagnostic = GetSingleDiagnostic(result, "KCLG113");
+
+        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(() => new SubcommandAttribute(require: true)).Throws<NotSupportedException>();
+    }
+
+    [Test]
+    public async Task Private_Tagged_Member_Document_Is_Available_When_Symbols_Are_Accessed()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -865,20 +1084,11 @@ public class ExportSymbolsGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
+        var property = GetSymbols(result, "Fixtures.Command")
+            .OfType<PropertyDefinition>()
+            .Single();
 
-        try
-        {
-            _ = GetSymbols(result, "Fixtures.Command");
-            throw new InvalidOperationException("Expected symbol access to fail because the generated Documents dictionary does not contain the private member.");
-        }
-        catch (TargetInvocationException exception)
-        {
-            await Assert.That(GetDeepestMessage(exception)).Contains("PrivateOption");
-        }
-        catch (TypeInitializationException exception)
-        {
-            await Assert.That(GetDeepestMessage(exception)).Contains("PrivateOption");
-        }
+        await Assert.That(property.Information.Name.Value).IsEqualTo("private-option");
     }
 
     private static GeneratorRunOutcome RunGenerator(

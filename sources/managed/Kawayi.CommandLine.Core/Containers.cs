@@ -815,5 +815,5 @@ public class Containers
             : exception;
     }
 
-    private readonly record struct ParsedDictionaryEntry(object Key, object Value);
+    private readonly record struct ParsedDictionaryEntry(object? Key, object? Value);
 }

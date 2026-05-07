@@ -22,7 +22,7 @@ public sealed record Subcommand(ParsingFinished ParentCommand,
 /// Represents a completed parsing operation that produced a result object.
 /// </summary>
 /// <param name="UntypedResult">The untyped parsed result.</param>
-public abstract record ParsingFinished(object UntypedResult) : ParsingResult;
+public abstract record ParsingFinished(object? UntypedResult) : ParsingResult;
 
 /// <summary>
 /// Represents a completed parsing operation with a strongly typed result.

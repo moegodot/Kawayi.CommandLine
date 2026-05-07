@@ -15,7 +15,7 @@ public class TokenizerTests
 
         var tokenizer = new Tokenizer();
 
-        var result = tokenizer.Tokenlize(input);
+        var result = tokenizer.Tokenize(input);
 
         await Assert.That(result.Length).EqualTo(0);
     }
@@ -27,7 +27,7 @@ public class TokenizerTests
 
         var tokenizer = new Tokenizer();
 
-        var result = tokenizer.Tokenlize(input);
+        var result = tokenizer.Tokenize(input);
 
         await Assert.That(result.Length).EqualTo(7);
         await Assert.That(result[0]).IsTypeOf<ArgumentOrCommandToken>().And.EqualTo(new("target"));
@@ -46,7 +46,7 @@ public class TokenizerTests
 
         var tokenizer = new Tokenizer();
 
-        var result = tokenizer.Tokenlize(input);
+        var result = tokenizer.Tokenize(input);
 
         await Assert.That(result.Length).EqualTo(2);
         await Assert.That(result[0]).IsTypeOf<ShortOptionToken>().And.EqualTo(new(string.Empty));
@@ -60,7 +60,7 @@ public class TokenizerTests
 
         var tokenizer = new Tokenizer();
 
-        var result = tokenizer.Tokenlize(input);
+        var result = tokenizer.Tokenize(input);
 
         await Assert.That(result.Length).IsEqualTo(3);
         await Assert.That(result[0]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("format", "json"));
@@ -75,7 +75,7 @@ public class TokenizerTests
 
         var tokenizer = new Tokenizer();
 
-        var result = tokenizer.Tokenlize(input);
+        var result = tokenizer.Tokenize(input);
 
         await Assert.That(result.Length).IsEqualTo(4);
         await Assert.That(result[0]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("count"));

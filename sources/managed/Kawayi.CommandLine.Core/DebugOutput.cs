@@ -192,19 +192,19 @@ internal static class DebugOutput
             return true;
         }
 
-        if (value is IParsingResultCollection collection)
+        if (value is Cli collection)
         {
             var commands = new Stack<string>();
-            IParsingResultCollection? current = collection;
+            Cli? current = collection;
 
             while (current is not null)
             {
-                if (current.Command is not null)
+                if (current.CurrentCommandDefinition is not null)
                 {
-                    commands.Push(current.Command.Information.Name.Value);
+                    commands.Push(current.CurrentCommandDefinition.Information.Name.Value);
                 }
 
-                current = current.Parent;
+                current = current.ParentCommand;
             }
 
             var commandSummary = commands.Count == 0 ? "none" : string.Join(", ", commands);

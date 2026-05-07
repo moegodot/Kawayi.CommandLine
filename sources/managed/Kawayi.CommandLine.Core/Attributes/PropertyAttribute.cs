@@ -17,7 +17,8 @@ public sealed class PropertyAttribute : SymbolAttribute
     /// <param name="require">Whether the property is required.</param>
     /// <param name="visible">Whether the property should be visible in help output.</param>
     /// <param name="valueName">The metavar name shown for option values.</param>
-    public PropertyAttribute(bool require = false, bool visible = true, string? valueName = null) : base(require, visible)
+    /// <param name="requirementIfNull">Whether the property is required when its effective value is null.</param>
+    public PropertyAttribute(bool require = false, bool visible = true, string? valueName = null, bool requirementIfNull = false) : base(require, visible, requirementIfNull)
     {
         ValueName = valueName;
     }

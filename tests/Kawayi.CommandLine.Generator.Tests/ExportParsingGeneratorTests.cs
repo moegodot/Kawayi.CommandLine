@@ -333,6 +333,36 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
+    public async Task Symbol_Errors_Suppress_Parsing_Output_Without_CSharp_Cascade()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0)]
+                public string? Input { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
+        var generatorDiagnostics = GetGeneratorDiagnostics(result);
+        var compilationErrors = result.Compilation.GetDiagnostics()
+            .Where(static item => item.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+
+        await Assert.That(generatorDiagnostics.Any(static item => item.Id == "KCLG104")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsFalse();
+        await Assert.That(compilationErrors.Any(static item => item.Id.StartsWith("CS", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
     public async Task Type_Without_Command_Or_ExportParsing_Does_Not_Generate_ParsingExporter()
     {
         const string source = """
@@ -407,7 +437,7 @@ public class ExportParsingGeneratorTests
         return references.ToImmutable();
     }
 
-    private static IParsingBuilder GetParsingBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
+    private static CliSchemaBuilder GetParsingBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
     {
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
         var method = targetType.GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)
@@ -415,7 +445,7 @@ public class ExportParsingGeneratorTests
         var rawValue = method.Invoke(null, [CreateOptions()])
             ?? throw new InvalidOperationException("Generated ExportParsing method returned null.");
 
-        return (IParsingBuilder)rawValue;
+        return (CliSchemaBuilder)rawValue;
     }
 
     private static Symbol[] GetSymbols(GeneratorRunOutcome outcome, string targetTypeMetadataName)

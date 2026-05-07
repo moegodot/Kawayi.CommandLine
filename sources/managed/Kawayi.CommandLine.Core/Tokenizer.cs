@@ -21,7 +21,9 @@ public sealed class Tokenizer : ITokenizer
     /// </summary>
     /// <param name="inputs">The raw command-line inputs.</param>
     /// <returns>The tokenized inputs.</returns>
-    public ImmutableArray<Token> Tokenlize(ImmutableArray<string> inputs)
+    public ImmutableArray<Token> Tokenize(ImmutableArray<string> inputs) => TokenizeCore(inputs);
+
+    private static ImmutableArray<Token> TokenizeCore(ImmutableArray<string> inputs)
     {
         var builder = ImmutableArray.CreateBuilder<Token>(inputs.Length);
 

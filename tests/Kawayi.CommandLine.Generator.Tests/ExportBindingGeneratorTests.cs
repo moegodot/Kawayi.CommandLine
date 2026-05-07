@@ -100,7 +100,7 @@ public class ExportBindingGeneratorTests
         ];
 
         var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
-        var command = Bind(result, "Fixtures.Command", leafScope);
+        var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var serve = GetPropertyValue(command, "ServeCommand");
 
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IBindable")).IsTrue();
@@ -288,7 +288,7 @@ public class ExportBindingGeneratorTests
         ];
 
         var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
-        var command = Bind(result, "Fixtures.Command", leafScope);
+        var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var global = GetPropertyValue(command, "Global");
         var watch = GetPropertyValue(global!, "Watch");
 
@@ -347,13 +347,170 @@ public class ExportBindingGeneratorTests
         ];
 
         var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
-        var command = Bind(result, "Fixtures.Command", leafScope);
+        var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
         var serve = GetPropertyValue(command, "ServeCommand");
 
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IBindable")).IsTrue();
         await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("payload");
         await Assert.That(serve).IsNotNull();
         await Assert.That((bool)GetPropertyValue(serve!, "ForceOption")!).IsTrue();
+    }
+
+    [Test]
+    public async Task Binding_Uses_Current_Scope_And_Recursively_Binds_Selected_Subcommands()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class ChildCommand
+            {
+                /// <summary>
+                /// Child input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Child value summary
+                /// </summary>
+                [Property]
+                [LongAlias("value")]
+                public string Value { get; set; } = string.Empty;
+            }
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Root input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Root value summary
+                /// </summary>
+                [Property]
+                [LongAlias("value")]
+                public string Value { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Serve summary
+                /// </summary>
+                [Subcommand]
+                public ChildCommand? Serve { get; private set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("root-input"),
+            new LongOptionToken("value"),
+            new ArgumentOrCommandToken("root-value"),
+            new ArgumentOrCommandToken("serve"),
+            new ArgumentOrCommandToken("child-input"),
+            new LongOptionToken("value"),
+            new ArgumentOrCommandToken("child-value")
+        ];
+
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+        var command = Bind(result, "Fixtures.Command", GetRootCommand(leafScope));
+        var serve = GetPropertyValue(command, "Serve");
+
+        await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("root-input");
+        await Assert.That(GetPropertyValue(command, "Value")).IsEqualTo("root-value");
+        await Assert.That(serve).IsNotNull();
+        await Assert.That(GetPropertyValue(serve!, "Input")).IsEqualTo("child-input");
+        await Assert.That(GetPropertyValue(serve!, "Value")).IsEqualTo("child-value");
+    }
+
+    [Test]
+    public async Task Binding_Root_From_Leaf_Scope_Fails_Instead_Of_AutoRewinding()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class ChildCommand
+            {
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("force")]
+                public bool Force { get; set; }
+            }
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Serve summary
+                /// </summary>
+                [Subcommand]
+                public ChildCommand? Serve { get; private set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetParsingBuilder(result, "Fixtures.Command");
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("payload"),
+            new ArgumentOrCommandToken("serve"),
+            new LongOptionToken("force"),
+            new ArgumentOrCommandToken("true")
+        ];
+
+        var leafScope = AssertFinishedCollection(ContinueSubcommands(ParsingBuilder.CreateParsing(CreateOptions(), arguments, builder.Build())));
+
+        await Assert.That(() => Bind(result, "Fixtures.Command", leafScope)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Symbol_Errors_Suppress_Binding_Output_Without_CSharp_Cascade()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0)]
+                public string? Input { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
+        var generatorDiagnostics = GetGeneratorDiagnostics(result);
+        var compilationErrors = result.Compilation.GetDiagnostics()
+            .Where(static item => item.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+
+        await Assert.That(generatorDiagnostics.Any(static item => item.Id == "KCLG104")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IBindable")).IsFalse();
+        await Assert.That(compilationErrors.Any(static item => item.Id.StartsWith("CS", StringComparison.Ordinal))).IsFalse();
     }
 
     [Test]
@@ -495,7 +652,7 @@ public class ExportBindingGeneratorTests
         return references.ToImmutable();
     }
 
-    private static IParsingBuilder GetParsingBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
+    private static CliSchemaBuilder GetParsingBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
     {
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
         var method = targetType.GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)
@@ -503,7 +660,7 @@ public class ExportBindingGeneratorTests
         var rawValue = method.Invoke(null, [CreateOptions()])
             ?? throw new InvalidOperationException("Generated ExportParsing method returned null.");
 
-        return (IParsingBuilder)rawValue;
+        return (CliSchemaBuilder)rawValue;
     }
 
     private static object Bind(
@@ -550,6 +707,18 @@ public class ExportBindingGeneratorTests
         return result is ParsingFinished { UntypedResult: IParsingResultCollection collection }
             ? collection
             : throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
+    }
+
+    private static IParsingResultCollection GetRootCommand(IParsingResultCollection result)
+    {
+        var current = result;
+
+        while (current.Parent is not null)
+        {
+            current = current.Parent;
+        }
+
+        return current;
     }
 
     private static object? GetPropertyValue(object instance, string propertyName)

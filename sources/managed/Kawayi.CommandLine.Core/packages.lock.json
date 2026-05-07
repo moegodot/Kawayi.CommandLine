@@ -10,15 +10,15 @@
       },
       "Microsoft.DotNet.ILCompiler": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "GK32IZtLLCqkFynwZyseoxiEJ6+Fl3GSNJpaHte2JdRqCb65lR46/uUC4qzgBYw5PWx/QKq38Kgg5UjHenPBAw=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "YKcTMRFU2iMSvqq7uz62j0nktAOvhKFn4+c5XbavODsuARgXPMVN+TTO4jZfo2if2hozqC2+WyD0xUA3F0Qulw=="
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "65aJw3nWbHCZDMcaqO6Gz0kHqUjp4KrIO/JUoRTxQN7JMgJjckUhMil2RtJKVhqEUjT+EymdJ1t4+N/7XSXd9w=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "TH3MSazsQm+XAv0HZuKaNpCZyYQiIfMxnylkkSmkQ9e9GR/FrhQCabgh8cyjunzyi7+nrlaMtphv4mbyMXGF2Q=="
       },
       "Microsoft.SourceLink.GitHub": {
         "type": "Direct",

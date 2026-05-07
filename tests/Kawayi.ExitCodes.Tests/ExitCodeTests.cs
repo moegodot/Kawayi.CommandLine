@@ -4,7 +4,7 @@
 using System.Reflection;
 using Kawayi.CommandLine.ExitCodes;
 
-namespace Kawayi.CommandLine.ExitCodes.Tests;
+namespace Kawayi.ExitCodes.Tests;
 
 public class ExitCodeTests
 {

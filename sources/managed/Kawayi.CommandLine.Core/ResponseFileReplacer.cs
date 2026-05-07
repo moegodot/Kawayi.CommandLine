@@ -45,7 +45,7 @@ public sealed class ResponseFileReplacer : IResponseFileReplacer
 
                 foreach (var line in lines)
                 {
-                    builder.AddRange(tokenizer.Tokenlize([line]));
+                    builder.AddRange(tokenizer.Tokenize([line]));
                 }
 
                 continue;
