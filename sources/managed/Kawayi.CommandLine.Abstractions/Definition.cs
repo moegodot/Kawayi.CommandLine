@@ -34,9 +34,9 @@ public abstract record TypedDefinition(
 {
     /// <summary>
     /// the factory to get the default value,
-    /// input the parsing result and return the default value
+    /// return the default value
     /// </summary>
-    public Func<object, object>? DefaultValueFactory { get; init; }
+    public Func<object>? DefaultValueFactory { get; init; }
 
     /// <summary>
     /// validation of the value, called on any value(including default value),
@@ -96,7 +96,7 @@ public sealed record PropertyDefinition(
     /// <summary>
     /// Gets the accepted number of option values.
     /// </summary>
-    public ValueRange NumArgs { get; init; } = ValueRange.ZeroOrMore;
+    public ValueRange NumArgs { get; init; } = InferDefaultNumArgs(Type);
 
     /// <summary>
     /// Gets the metavariable name shown in help output.
@@ -107,4 +107,32 @@ public sealed record PropertyDefinition(
     /// Gets the possible values metadata used for help rendering.
     /// </summary>
     public PossibleValues? PossibleValues { get; init; }
+
+    private static ValueRange InferDefaultNumArgs(Type type)
+    {
+        var effectiveType = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (effectiveType == typeof(bool))
+        {
+            return ValueRange.ZeroOrOne;
+        }
+
+        if (effectiveType.IsConstructedGenericType)
+        {
+            var genericDefinition = effectiveType.GetGenericTypeDefinition();
+            if (genericDefinition == typeof(ImmutableDictionary<,>)
+                || genericDefinition == typeof(ImmutableSortedDictionary<,>)
+                || genericDefinition == typeof(ImmutableArray<>)
+                || genericDefinition == typeof(ImmutableList<>)
+                || genericDefinition == typeof(ImmutableQueue<>)
+                || genericDefinition == typeof(ImmutableStack<>)
+                || genericDefinition == typeof(ImmutableSortedSet<>)
+                || genericDefinition == typeof(ImmutableHashSet<>))
+            {
+                return ValueRange.ZeroOrMore;
+            }
+        }
+
+        return ValueRange.One;
+    }
 }

@@ -6,7 +6,7 @@ namespace Kawayi.CommandLine.Abstractions;
 /// <summary>
 /// Exposes a generated schema exporter for a command type.
 /// </summary>
-public interface IParsingExporter
+public interface ICliSchemaExporter
 {
     /// <summary>
     /// Exports a mutable parsing builder for the current command type.

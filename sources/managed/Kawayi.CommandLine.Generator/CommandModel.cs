@@ -29,7 +29,7 @@ internal static class MetadataNames
 
     public const string DocumentExporter = "Kawayi.CommandLine.Abstractions.IDocumentExporter";
     public const string SymbolExporter = "Kawayi.CommandLine.Abstractions.ISymbolExporter";
-    public const string ParsingExporter = "Kawayi.CommandLine.Abstractions.IParsingExporter";
+    public const string CliSchemaExporter = "Kawayi.CommandLine.Abstractions.ICliSchemaExporter";
     public const string Bindable = "Kawayi.CommandLine.Abstractions.IBindable";
     public const string Parsable = "Kawayi.CommandLine.Abstractions.IParsable";
 }
@@ -66,7 +66,7 @@ internal sealed class CommandModel
         bool hasBindableAttribute,
         bool implementsDocumentExporter,
         bool implementsSymbolExporter,
-        bool implementsParsingExporter,
+        bool implementsCliSchemaExporter,
         bool implementsBindable,
         bool hasParsableSelfInterface,
         ImmutableArray<MemberModel> members,
@@ -81,7 +81,7 @@ internal sealed class CommandModel
         HasBindableAttribute = hasBindableAttribute;
         ImplementsDocumentExporter = implementsDocumentExporter;
         ImplementsSymbolExporter = implementsSymbolExporter;
-        ImplementsParsingExporter = implementsParsingExporter;
+        ImplementsCliSchemaExporter = implementsCliSchemaExporter;
         ImplementsBindable = implementsBindable;
         HasParsableSelfInterface = hasParsableSelfInterface;
         Members = members;
@@ -106,7 +106,7 @@ internal sealed class CommandModel
 
     public bool ImplementsSymbolExporter { get; }
 
-    public bool ImplementsParsingExporter { get; }
+    public bool ImplementsCliSchemaExporter { get; }
 
     public bool ImplementsBindable { get; }
 
@@ -340,7 +340,7 @@ internal sealed class CommandModel
             HasAttribute(typeSymbol, MetadataNames.BindableAttribute),
             ImplementsInterface(typeSymbol, MetadataNames.DocumentExporter),
             ImplementsInterface(typeSymbol, MetadataNames.SymbolExporter),
-            ImplementsInterface(typeSymbol, MetadataNames.ParsingExporter),
+            ImplementsInterface(typeSymbol, MetadataNames.CliSchemaExporter),
             ImplementsInterface(typeSymbol, MetadataNames.Bindable),
             HasParsableSelfInterfaceImpl(typeSymbol),
             members.ToImmutable(),

@@ -3,6 +3,7 @@
 
 using System.Collections.Immutable;
 using Kawayi.CommandLine.Abstractions;
+using Kawayi.Escapes;
 
 namespace Kawayi.CommandLine.Core;
 
@@ -11,6 +12,12 @@ namespace Kawayi.CommandLine.Core;
 /// </summary>
 public sealed class Tokenizer : ITokenizer
 {
+    /// <summary>
+    /// Gets the default escape rule used to force dash-prefixed inputs to parse as arguments.
+    /// </summary>
+    public static IEscapeRule DefaultArgumentEscapeRule { get; } = new SimpleEscapeRule(
+        ImmutableDictionary.CreateRange(StringComparer.Ordinal, [new KeyValuePair<string, string>("-", @"\-")]));
+
     /// <summary>
     /// A global tokenizer
     /// </summary>
@@ -26,10 +33,30 @@ public sealed class Tokenizer : ITokenizer
     private static ImmutableArray<Token> TokenizeCore(ImmutableArray<string> inputs)
     {
         var builder = ImmutableArray.CreateBuilder<Token>(inputs.Length);
+        var forceProgramArgument = false;
 
         for (var index = 0; index < inputs.Length; index++)
         {
             var input = inputs[index];
+
+            if (forceProgramArgument)
+            {
+                builder.Add(new ArgumentToken(input));
+                continue;
+            }
+
+            if (input.StartsWith(@"\-", StringComparison.Ordinal))
+            {
+                builder.Add(new ArgumentToken(DefaultArgumentEscapeRule.Unescape(input)));
+                continue;
+            }
+
+            if (string.Equals(input, "--", StringComparison.Ordinal))
+            {
+                builder.Add(new OptionTerminatorToken());
+                forceProgramArgument = true;
+                continue;
+            }
 
             if (input.StartsWith("--", StringComparison.Ordinal))
             {
@@ -48,7 +75,10 @@ public sealed class Tokenizer : ITokenizer
 
             if (input.StartsWith("-", StringComparison.Ordinal))
             {
-                builder.Add(new ShortOptionToken(input[1..]));
+                var optionText = input[1..];
+                var optionName = optionText.Length == 0 ? string.Empty : optionText[..1];
+                var inlineValue = optionText.Length > 1 ? optionText[1..] : null;
+                builder.Add(new ShortOptionToken(optionName, inlineValue));
                 continue;
             }
 

@@ -23,18 +23,34 @@ public sealed class CliSchemaParser
     public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, CliSchema initialState)
     {
         ArgumentNullException.ThrowIfNull(options);
+        var (parseArguments, toProgramArguments) = SplitOptionTerminator(arguments);
 
-        return ParseDeferred(options, arguments, initialState, null, null);
+        return ParseDeferred(options, parseArguments, toProgramArguments, initialState, null, null);
+    }
+
+    private static (ImmutableArray<Token> ParseArguments, ImmutableArray<Token> ToProgramArguments) SplitOptionTerminator(ImmutableArray<Token> arguments)
+    {
+        for (var index = 0; index < arguments.Length; index++)
+        {
+            if (arguments[index] is OptionTerminatorToken)
+            {
+                return (arguments[..index], arguments[(index + 1)..]);
+            }
+        }
+
+        return (arguments, ImmutableArray<Token>.Empty);
     }
 
     private static ParsingResult ParseDeferred(ParsingOptions options,
                                                ImmutableArray<Token> arguments,
+                                               ImmutableArray<Token> toProgramArguments,
                                                CliSchema schema,
                                                Cli? parentCommand,
                                                CommandDefinition? currentCommand)
     {
         return ParseScope(options,
                           arguments,
+                          toProgramArguments,
                           schema,
                           parentCommand,
                           currentCommand,
@@ -56,7 +72,7 @@ public sealed class CliSchemaParser
             ScopeTerminated terminated => EmitSchemaDebug(options,
                                                           terminated.Result,
                                                           arguments,
-                                                          BuildEmptyCommand(options, schema, parentCommand, currentCommand),
+                                                          BuildEmptyCommand(options, schema, parentCommand, currentCommand, toProgramArguments),
                                                           "terminated command scope"),
             _ => throw new InvalidOperationException("Unsupported schema parser state.")
         };
@@ -66,6 +82,7 @@ public sealed class CliSchemaParser
     {
         var childResult = ParseScope(options,
                                      deferred.RemainingTokens,
+                                     deferred.ToProgramArguments,
                                      deferred.ChildSchema,
                                      deferred.ParentCommand,
                                      deferred.Definition,
@@ -95,6 +112,7 @@ public sealed class CliSchemaParser
 
     private static ScopeResult ParseScope(ParsingOptions options,
                                           ImmutableArray<Token> arguments,
+                                          ImmutableArray<Token> toProgramArguments,
                                           CliSchema schema,
                                           Cli? parentCommand,
                                           CommandDefinition? currentCommand,
@@ -114,10 +132,11 @@ public sealed class CliSchemaParser
             }
 
             if (token is ArgumentOrCommandToken commandToken
+                && token is not ArgumentToken
                 && schema.SubcommandDefinitions.TryGetValue(commandToken, out var definition)
                 && schema.Subcommands.TryGetValue(new ArgumentOrCommandToken(definition.Information.Name.Value), out var childSchema))
             {
-                var parentResult = CompleteCurrentScope(options, schema, parentCommand, currentCommand, positionals.ToImmutable(), propertyTokens);
+                var parentResult = CompleteCurrentScope(options, schema, parentCommand, currentCommand, toProgramArguments, positionals.ToImmutable(), propertyTokens);
 
                 if (parentResult is not ParsingFinished<Cli> parentFinished)
                 {
@@ -129,11 +148,12 @@ public sealed class CliSchemaParser
 
                 if (deferSubcommands)
                 {
-                    return new ScopeDeferred(parentFinished.Result, definition, childSchema, remainingTokens);
+                    return new ScopeDeferred(parentFinished.Result, definition, childSchema, remainingTokens, toProgramArguments);
                 }
 
                 var childResult = ParseScope(options,
                                              remainingTokens,
+                                             toProgramArguments,
                                              childSchema,
                                              parentFinished.Result,
                                              definition,
@@ -161,6 +181,12 @@ public sealed class CliSchemaParser
             {
                 if (!TryGetProperty(schema, optionToken, out var property))
                 {
+                    if (TryConsumeDashPrefixedArgument(schema, positionals, optionToken))
+                    {
+                        index++;
+                        continue;
+                    }
+
                     return new ScopeTerminated(new UnknownArgumentDetected(FormatToken(optionToken), null));
                 }
 
@@ -172,7 +198,7 @@ public sealed class CliSchemaParser
             index++;
         }
 
-        var result = CompleteCurrentScope(options, schema, parentCommand, currentCommand, positionals.ToImmutable(), propertyTokens);
+        var result = CompleteCurrentScope(options, schema, parentCommand, currentCommand, toProgramArguments, positionals.ToImmutable(), propertyTokens);
         return result is ParsingFinished<Cli> finished
             ? new ScopeFinished(finished.Result)
             : new ScopeTerminated(result);
@@ -182,6 +208,7 @@ public sealed class CliSchemaParser
                                                       CliSchema schema,
                                                       Cli? parentCommand,
                                                       CommandDefinition? currentCommand,
+                                                      ImmutableArray<Token> toProgramArguments,
                                                       ImmutableArray<Token> positionalTokens,
                                                       Dictionary<PropertyDefinition, List<Token>> propertyTokens)
     {
@@ -206,7 +233,8 @@ public sealed class CliSchemaParser
                                       currentCommand,
                                       argumentValues.ToImmutableDictionary(static item => item.Key, static item => item.Value!),
                                       propertyValues.ToImmutableDictionary(static item => item.Key, static item => item.Value!),
-                                      ImmutableDictionary<CommandDefinition, Cli>.Empty);
+                                      ImmutableDictionary<CommandDefinition, Cli>.Empty,
+                                      toProgramArguments);
 
         var effectiveResult = ApplyEffectiveValues(options, explicitCommand, argumentValues, propertyValues);
         if (effectiveResult is not null)
@@ -350,16 +378,20 @@ public sealed class CliSchemaParser
     {
         var hasExplicitValue = values.TryGetValue(definition, out var value);
 
-        if (!hasExplicitValue)
+        if (!hasExplicitValue && definition.DefaultValueFactory is not null)
         {
-            value = definition.DefaultValueFactory is not null
-                ? definition.DefaultValueFactory(explicitCommand)
-                : TypeDefaultValues.GetValue(definition.Type);
+            value = definition.DefaultValueFactory();
+            hasExplicitValue = true;
         }
 
-        if (definition.Requirement && !hasExplicitValue && definition.DefaultValueFactory is null)
+        if (definition.Requirement && !hasExplicitValue)
         {
             return new InvalidArgumentDetected(definition.Information.Name.Value, "required value", null);
+        }
+
+        if (!hasExplicitValue)
+        {
+            return null;
         }
 
         if (definition.RequirementIfNull && value is null)
@@ -400,9 +432,9 @@ public sealed class CliSchemaParser
 
         if (property.Type == typeof(bool))
         {
-            if (option is LongOptionToken { InlineNextValue: not null } inline)
+            if (TryGetInlineValue(option, out var inlineValue))
             {
-                tokens.Add(new ArgumentOrCommandToken(inline.InlineNextValue));
+                tokens.Add(new ArgumentOrCommandToken(inlineValue));
                 return optionIndex + 1;
             }
 
@@ -419,9 +451,11 @@ public sealed class CliSchemaParser
             return optionIndex + 1;
         }
 
-        if (option is LongOptionToken { InlineNextValue: not null } longOption)
+        if (TryGetInlineValue(option, out var inlineOptionValue))
         {
-            tokens.Add(new ArgumentOrCommandToken(longOption.InlineNextValue));
+            tokens.Add(new ArgumentOrCommandToken(inlineOptionValue));
+            WriteTrace(options, "Option", $"{FormatToken(option)} collected {tokens.Count} value(s)", null);
+            return optionIndex + 1;
         }
 
         var index = optionIndex + 1;
@@ -432,7 +466,8 @@ public sealed class CliSchemaParser
 
             if (IsTerminatingFlag(options, next)
                 || IsKnownOption(schema, next)
-                || next is ArgumentOrCommandToken argument && schema.SubcommandDefinitions.ContainsKey(argument))
+                || next is ArgumentOrCommandToken argument && argument is not ArgumentToken && schema.SubcommandDefinitions.ContainsKey(argument)
+                || IsNumericLikeType(property.Type) && next is OptionToken && !CanParseAsValue(next, property.Type))
             {
                 break;
             }
@@ -764,16 +799,148 @@ public sealed class CliSchemaParser
         };
     }
 
+    private static bool TryGetInlineValue(OptionToken token, out string value)
+    {
+        switch (token)
+        {
+            case LongOptionToken { InlineNextValue: not null } longOption:
+                value = longOption.InlineNextValue;
+                return true;
+            case ShortOptionToken { InlineNextValue: not null } shortOption:
+                value = shortOption.InlineNextValue;
+                return true;
+            default:
+                value = string.Empty;
+                return false;
+        }
+    }
+
     private static Token ConvertToValueToken(Token token)
     {
         return token switch
         {
             ArgumentOrCommandToken => token,
+            ShortOptionToken { InlineNextValue: not null } shortOption => new ArgumentOrCommandToken($"-{shortOption.Value}{shortOption.InlineNextValue}"),
             ShortOptionToken shortOption => new ArgumentOrCommandToken($"-{shortOption.Value}"),
             LongOptionToken { InlineNextValue: not null } longOption => new ArgumentOrCommandToken($"--{longOption.Value}={longOption.InlineNextValue}"),
             LongOptionToken longOption => new ArgumentOrCommandToken($"--{longOption.Value}"),
             _ => new ArgumentOrCommandToken(token.Value)
         };
+    }
+
+    private static bool TryConsumeDashPrefixedArgument(CliSchema schema,
+                                                       ImmutableArray<Token>.Builder positionals,
+                                                       OptionToken optionToken)
+    {
+        if (!TryGetCurrentArgument(schema, positionals.Count, out var definition) ||
+            !IsNumericLikeType(definition.Type) ||
+            !CanParseAsValue(optionToken, definition.Type))
+        {
+            return false;
+        }
+
+        positionals.Add(ConvertToValueToken(optionToken));
+        return true;
+    }
+
+    private static bool TryGetCurrentArgument(CliSchema schema, int receivedCount, out ParameterDefinition definition)
+    {
+        var remaining = receivedCount;
+
+        foreach (var argument in schema.Argument)
+        {
+            if (remaining < argument.ValueRange.Maximum)
+            {
+                definition = argument;
+                return true;
+            }
+
+            remaining -= argument.ValueRange.Maximum;
+        }
+
+        definition = null!;
+        return false;
+    }
+
+    private static bool IsNumericLikeType(Type type)
+    {
+        var effectiveType = Nullable.GetUnderlyingType(type) ?? type;
+        return effectiveType == typeof(byte)
+            || effectiveType == typeof(sbyte)
+            || effectiveType == typeof(ushort)
+            || effectiveType == typeof(short)
+            || effectiveType == typeof(uint)
+            || effectiveType == typeof(int)
+            || effectiveType == typeof(ulong)
+            || effectiveType == typeof(long)
+            || effectiveType == typeof(float)
+            || effectiveType == typeof(double)
+            || effectiveType == typeof(decimal);
+    }
+
+    private static bool CanParseAsValue(Token token, Type type)
+    {
+        var value = ConvertToValueToken(token).Value;
+        var effectiveType = Nullable.GetUnderlyingType(type) ?? type;
+        var integerStyles = NumberParser.DefaultNumberStyles;
+        var floatStyles = FloatParser.DefaultNumberStyles;
+
+        if (effectiveType == typeof(byte))
+        {
+            return byte.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(sbyte))
+        {
+            return sbyte.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(ushort))
+        {
+            return ushort.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(short))
+        {
+            return short.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(uint))
+        {
+            return uint.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(int))
+        {
+            return int.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(ulong))
+        {
+            return ulong.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(long))
+        {
+            return long.TryParse(value, integerStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(float))
+        {
+            return float.TryParse(value, floatStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(double))
+        {
+            return double.TryParse(value, floatStyles, null, out _);
+        }
+
+        if (effectiveType == typeof(decimal))
+        {
+            return decimal.TryParse(value, floatStyles, null, out _);
+        }
+
+        return false;
     }
 
     private static bool TryCreateContainerType(Type targetType, out ContainerType containerType)
@@ -845,7 +1012,8 @@ public sealed class CliSchemaParser
     private static Cli BuildEmptyCommand(ParsingOptions options,
                                          CliSchema schema,
                                          Cli? parentCommand,
-                                         CommandDefinition? currentCommand)
+                                         CommandDefinition? currentCommand,
+                                         ImmutableArray<Token> toProgramArguments)
     {
         return new Cli(options,
                        schema,
@@ -853,7 +1021,8 @@ public sealed class CliSchemaParser
                        currentCommand,
                        ImmutableDictionary<ParameterDefinition, object>.Empty,
                        ImmutableDictionary<PropertyDefinition, object>.Empty,
-                       ImmutableDictionary<CommandDefinition, Cli>.Empty);
+                       ImmutableDictionary<CommandDefinition, Cli>.Empty,
+                       toProgramArguments);
     }
 
     private static ParsingResult EmitSchemaDebug(ParsingOptions options,
@@ -939,6 +1108,7 @@ public sealed class CliSchemaParser
     {
         return token switch
         {
+            ShortOptionToken { InlineNextValue: not null } shortOption => $"-{shortOption.Value}{shortOption.InlineNextValue}",
             ShortOptionToken shortOption => $"-{shortOption.Value}",
             LongOptionToken { InlineNextValue: not null } longOption => $"--{longOption.Value}={longOption.InlineNextValue}",
             LongOptionToken longOption => $"--{longOption.Value}",
@@ -953,7 +1123,8 @@ public sealed class CliSchemaParser
     private sealed record ScopeDeferred(Cli ParentCommand,
                                         CommandDefinition Definition,
                                         CliSchema ChildSchema,
-                                        ImmutableArray<Token> RemainingTokens) : ScopeResult;
+                                        ImmutableArray<Token> RemainingTokens,
+                                        ImmutableArray<Token> ToProgramArguments) : ScopeResult;
 
     private sealed record ScopeTerminated(ParsingResult Result) : ScopeResult;
 }

@@ -17,7 +17,7 @@ namespace Kawayi.CommandLine.Generator.Tests;
 public class ExportParsingGeneratorTests
 {
     [Test]
-    public async Task Generates_ParsingExporter_And_Builds_CliSchemaBuilder_From_Symbols()
+    public async Task Generates_CliSchemaExporter_And_Builds_CliSchemaBuilder_From_Symbols()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -60,7 +60,7 @@ public class ExportParsingGeneratorTests
         var symbols = GetSymbols(result, "Fixtures.Command");
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
@@ -126,7 +126,7 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
-    public async Task CommandAttribute_Generates_ParsingExporter_And_Accepts_CommandSubcommands()
+    public async Task CommandAttribute_Generates_CliSchemaExporter_And_Accepts_CommandSubcommands()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -168,7 +168,7 @@ public class ExportParsingGeneratorTests
         var symbols = GetSymbols(result, "Fixtures.Command");
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
         await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("serve-command"))).IsTrue();
@@ -305,7 +305,7 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
-    public async Task Subcommand_Without_ParsingExporter_ReportsDiagnostic()
+    public async Task Subcommand_Without_CliSchemaExporter_ReportsDiagnostic()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -331,7 +331,7 @@ public class ExportParsingGeneratorTests
         var diagnostic = GetSingleDiagnostic(result, "KCLG203");
 
         await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
-        await Assert.That(diagnostic.GetMessage()).Contains("IParsingExporter");
+        await Assert.That(diagnostic.GetMessage()).Contains("ICliSchemaExporter");
     }
 
     [Test]
@@ -360,12 +360,12 @@ public class ExportParsingGeneratorTests
             .ToArray();
 
         await Assert.That(generatorDiagnostics.Any(static item => item.Id == "KCLG104")).IsTrue();
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsFalse();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsFalse();
         await Assert.That(compilationErrors.Any(static item => item.Id.StartsWith("CS", StringComparison.Ordinal))).IsFalse();
     }
 
     [Test]
-    public async Task Type_Without_Command_Or_ExportParsing_Does_Not_Generate_ParsingExporter()
+    public async Task Type_Without_Command_Or_ExportParsing_Does_Not_Generate_CliSchemaExporter()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -380,7 +380,7 @@ public class ExportParsingGeneratorTests
 
         var result = RunGenerator(source, "Fixtures.Command");
 
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsFalse();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsFalse();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
     }
 
@@ -434,7 +434,7 @@ public class ExportParsingGeneratorTests
 
         references.Add(MetadataReference.CreateFromFile(typeof(CommandAttribute).Assembly.Location));
         references.Add(MetadataReference.CreateFromFile(typeof(CliSchemaParser).Assembly.Location));
-        references.Add(MetadataReference.CreateFromFile(typeof(IParsingExporter).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(ICliSchemaExporter).Assembly.Location));
 
         return references.ToImmutable();
     }

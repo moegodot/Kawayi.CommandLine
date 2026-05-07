@@ -14,9 +14,10 @@ namespace Kawayi.CommandLine.Abstractions;
 /// <param name="Schema">the schema the result obey</param>
 /// <param name="ParentCommand">parent command's parsing result.If current command is root command, this must be null</param>
 /// <param name="CurrentCommandDefinition">parent command's definition for current subcommand.If current command is root command, this must be null</param>
-/// <param name="Arguments">parsed arguments. <see cref="TypedDefinition.DefaultValueFactory"/> and <see cref="TypedDefinition.Validation"/> was not called.</param>
-/// <param name="Properties">parsed properties, <see cref="TypedDefinition.DefaultValueFactory"/> and <see cref="TypedDefinition.Validation"/> was not called.</param>
+/// <param name="Arguments">Parsed argument values, including explicit values and generated defaults.</param>
+/// <param name="Properties">Parsed property values, including explicit values and generated defaults.</param>
 /// <param name="Subcommands">parsed subcommands</param>
+/// <param name="ToProgramArguments">Tokens after the option terminator that should be forwarded to another program.</param>
 public sealed record Cli(
     ParsingOptions ParsingOptions,
     CliSchema Schema,
@@ -24,4 +25,5 @@ public sealed record Cli(
     CommandDefinition? CurrentCommandDefinition,
     ImmutableDictionary<ParameterDefinition, object> Arguments,
     ImmutableDictionary<PropertyDefinition, object> Properties,
-    ImmutableDictionary<CommandDefinition, Cli> Subcommands);
+    ImmutableDictionary<CommandDefinition, Cli> Subcommands,
+    ImmutableArray<Token> ToProgramArguments);

@@ -122,7 +122,7 @@ internal static class GeneratorDescriptors
     public static readonly DiagnosticDescriptor ParsingNonPartial = new(
         id: "KCLG201",
         title: "ExportParsing target must be partial",
-        messageFormat: "Type '{0}' must be declared partial to generate parsing exports",
+        messageFormat: "Type '{0}' must be declared partial to generate schema exports",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -130,15 +130,15 @@ internal static class GeneratorDescriptors
     public static readonly DiagnosticDescriptor MissingSymbolExporterForParsing = new(
         id: "KCLG202",
         title: "ExportParsing target must provide symbols",
-        messageFormat: "Type '{0}' must implement ISymbolExporter, or use ExportSymbolsAttribute or CommandAttribute to generate symbol exports, before parsing exports can be generated",
+        messageFormat: "Type '{0}' must implement ISymbolExporter, or use ExportSymbolsAttribute or CommandAttribute to generate symbol exports, before schema exports can be generated",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor InvalidSubcommandExporter = new(
         id: "KCLG203",
-        title: "Subcommand type must provide parsing exports",
-        messageFormat: "Subcommand member '{0}' must target a type that implements IParsingExporter or is annotated with ExportParsingAttribute or CommandAttribute",
+        title: "Subcommand type must provide schema exports",
+        messageFormat: "Subcommand member '{0}' must target a type that implements ICliSchemaExporter or is annotated with ExportParsingAttribute or CommandAttribute",
         category: "Kawayi.CommandLine.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Kawayi.CommandLine.Generator;
 
 /// <summary>
-/// Generates <c>IParsingExporter</c> and <c>IParsable&lt;T&gt;</c> implementations for
+/// Generates <c>ICliSchemaExporter</c> and <c>IParsable&lt;T&gt;</c> implementations for
 /// types annotated with <c>ExportParsingAttribute</c> or <c>CommandAttribute</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
@@ -60,7 +60,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!SupportsParsingExporter(member.PropertySymbol.Type, cancellationToken, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default)))
+            if (!SupportsCliSchemaExporter(member.PropertySymbol.Type, cancellationToken, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default)))
             {
                 diagnostics.Add(new DiagnosticInfo(GeneratorDescriptors.InvalidSubcommandExporter, member.Location, [member.MemberName]));
                 continue;
@@ -72,7 +72,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         return new ParsingTarget(model, subcommands.ToImmutable(), diagnostics.ToImmutable());
     }
 
-    private static bool SupportsParsingExporter(
+    private static bool SupportsCliSchemaExporter(
         ITypeSymbol typeSymbol,
         CancellationToken cancellationToken,
         HashSet<ITypeSymbol> visited)
@@ -82,7 +82,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             return false;
         }
 
-        if (CommandModel.ImplementsInterface(namedType, MetadataNames.ParsingExporter))
+        if (CommandModel.ImplementsInterface(namedType, MetadataNames.CliSchemaExporter))
         {
             return true;
         }
@@ -108,7 +108,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
 
         foreach (var subcommand in model.Members.Where(static item => item.Kind == MemberKind.Subcommand))
         {
-            if (!SupportsParsingExporter(subcommand.PropertySymbol.Type, cancellationToken, visited))
+            if (!SupportsCliSchemaExporter(subcommand.PropertySymbol.Type, cancellationToken, visited))
             {
                 return false;
             }
@@ -175,9 +175,9 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         }
 
         var interfaces = ImmutableArray.CreateBuilder<string>(2);
-        if (!model.ImplementsParsingExporter)
+        if (!model.ImplementsCliSchemaExporter)
         {
-            interfaces.Add("global::Kawayi.CommandLine.Abstractions.IParsingExporter");
+            interfaces.Add("global::Kawayi.CommandLine.Abstractions.ICliSchemaExporter");
         }
 
         if (!model.HasParsableSelfInterface)
@@ -328,7 +328,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             GeneratorSource.AppendIndentedLine(
                 builder,
                 indentLevel + 1,
-                $"throw new global::System.InvalidOperationException(\"Expected Symbols for \" + {typeNameLiteral} + \" to contain a CommandDefinition named '\" + commandName + \"' so the generated parsing exporter can attach the child parser.\");");
+                $"throw new global::System.InvalidOperationException(\"Expected Symbols for \" + {typeNameLiteral} + \" to contain a CommandDefinition named '\" + commandName + \"' so the generated schema exporter can attach the child parser.\");");
             GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
         }
 

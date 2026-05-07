@@ -135,7 +135,7 @@ public sealed class CliSchemaParserTests
     {
         var retries = CreateProperty("retries", typeof(int)) with
         {
-            DefaultValueFactory = static _ => 3,
+            DefaultValueFactory = static () => 3,
             Validation = static value => (int)value <= 0 ? "retries must be greater than zero." : null
         };
         var schema = CreateBuilder(properties: [retries]).Build();
@@ -149,6 +149,112 @@ public sealed class CliSchemaParserTests
 
         await Assert.That(command.Properties[retries]).IsEqualTo(3);
         await Assert.That(invalidResult).IsTypeOf<FailedValidation>();
+    }
+
+    [Test]
+    public async Task CreateParsing_Rejects_Missing_Scalar_Property_Value()
+    {
+        var threshold = CreateProperty("threshold", typeof(decimal));
+        var schema = CreateBuilder(properties: [threshold]).Build();
+
+        var result = CliSchemaParser.CreateParsing(CreateOptions(), [new LongOptionToken("threshold")], schema);
+
+        await Assert.That(result).IsTypeOf<InvalidArgumentDetected>();
+    }
+
+    [Test]
+    public async Task CreateParsing_Omits_Absent_Optional_Property_Without_DefaultFactory()
+    {
+        var endpoint = CreateProperty("endpoint", typeof(Uri));
+        var schema = CreateBuilder(properties: [endpoint]).Build();
+
+        var result = CliSchemaParser.CreateParsing(CreateOptions(), [], schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Properties.ContainsKey(endpoint)).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateParsing_Stores_Tokens_After_OptionTerminator_As_ToProgramArguments()
+    {
+        var input = CreateParameter("input", typeof(string), ValueRange.One);
+        var schema = CreateBuilder(arguments: [input]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [new ArgumentOrCommandToken("payload"), new OptionTerminatorToken(), new ArgumentToken("--child"), new ArgumentToken("-x")],
+            schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Arguments[input]).IsEqualTo("payload");
+        await Assert.That(command.ToProgramArguments.Length).IsEqualTo(2);
+        await Assert.That(command.ToProgramArguments[0]).IsEqualTo(new ArgumentToken("--child"));
+        await Assert.That(command.ToProgramArguments[1]).IsEqualTo(new ArgumentToken("-x"));
+    }
+
+    [Test]
+    public async Task CreateParsing_Does_Not_Match_ArgumentToken_As_Subcommand()
+    {
+        var input = CreateParameter("input", typeof(string), ValueRange.One);
+        var subcommand = CreateCommand("serve");
+        var schema = CreateBuilder(arguments: [input], subcommands: [subcommand]).Build();
+
+        var result = CliSchemaParser.CreateParsing(CreateOptions(), [new ArgumentToken("serve")], schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Arguments[input]).IsEqualTo("serve");
+    }
+
+    [Test]
+    public async Task CreateParsing_Parses_DashPrefixed_Numeric_Arguments_And_Properties()
+    {
+        var count = CreateParameter("count", typeof(int), ValueRange.One);
+        var threshold = CreateProperty("threshold", typeof(decimal));
+        var schema = CreateBuilder(arguments: [count], properties: [threshold]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [new ShortOptionToken("1"), new LongOptionToken("threshold"), new ShortOptionToken("1", ".5")],
+            schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Arguments[count]).IsEqualTo(-1);
+        await Assert.That(command.Properties[threshold]).IsEqualTo(-1.5m);
+    }
+
+    [Test]
+    public async Task CreateParsing_Does_Not_Consume_Known_Option_As_Numeric_Value()
+    {
+        var threshold = CreateProperty("threshold", typeof(decimal));
+        var verbose = CreateProperty("verbose", typeof(bool)) with
+        {
+            ShortName = ImmutableDictionary<string, NameWithVisibility>.Empty.Add("v", new NameWithVisibility("v", true))
+        };
+        var schema = CreateBuilder(properties: [threshold, verbose]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [new LongOptionToken("threshold"), new ShortOptionToken("v")],
+            schema);
+
+        await Assert.That(result).IsTypeOf<InvalidArgumentDetected>();
+    }
+
+    [Test]
+    public async Task CreateParsing_InlineValue_Does_Not_Consume_Next_Token()
+    {
+        var input = CreateParameter("input", typeof(string), ValueRange.One);
+        var name = CreateProperty("name", typeof(string));
+        var schema = CreateBuilder(arguments: [input], properties: [name]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [new LongOptionToken("name", "alpha"), new ArgumentOrCommandToken("payload")],
+            schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Properties[name]).IsEqualTo("alpha");
+        await Assert.That(command.Arguments[input]).IsEqualTo("payload");
     }
 
     [Test]

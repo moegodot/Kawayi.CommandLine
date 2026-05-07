@@ -4,13 +4,16 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format=json --env=region=cn --execution-mode=background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --workspace-name atelier
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold -1
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload extra-a extra-b --format json --verbose
 // CLI_DEBUG=1 dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost --daemon watch --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch error --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --trace-id-prefix demo --color-output true
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload hidden-profile extra-a extra-b --format xml --verbose true --retries 4 --tag alpha --tag beta --env region=cn --env tier=prod serve localhost --daemon false watch --interval 5 --once true --sink stdout changes
-// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch --interval 5 --sink -L/bin/foo.a
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch --interval 5 -k-L/bin/foo.a
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- '\-serve' --format json
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json -- --child -x
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json @sample-response.txt
 // sample-response.txt stores one token per line, for example:
 // --secret-token
@@ -106,7 +109,7 @@ internal static class Program
     }
 
     private static void PrintOverview<T>(TextWriter output, ParsingOptions options)
-        where T : IDocumentExporter, ISymbolExporter, IParsingExporter, Kawayi.CommandLine.Abstractions.IParsable<T>, new()
+        where T : IDocumentExporter, ISymbolExporter, ICliSchemaExporter, Kawayi.CommandLine.Abstractions.IParsable<T>, new()
     {
         var warmupResult = T.CreateParsing(options, [new LongOptionToken("help")], new T());
         var parserSurface = T.ExportParsing(options);
@@ -128,29 +131,29 @@ internal static class Program
 
         rootBuilder.Properties["retries"] = rootBuilder.Properties["retries"] with
         {
-            DefaultValueFactory = static _ => 3,
+            DefaultValueFactory = static () => 3,
             Validation = static value => (int)value < 0 ? "retries must be zero or greater." : null
         };
 
         rootBuilder.Properties["env"] = rootBuilder.Properties["env"] with
         {
-            DefaultValueFactory = static _ => ImmutableDictionary<string, string>.Empty
+            DefaultValueFactory = static () => ImmutableDictionary<string, string>.Empty
         };
 
         rootBuilder.Properties["trace-id-prefix"] = rootBuilder.Properties["trace-id-prefix"] with
         {
-            DefaultValueFactory = static _ => "workspace"
+            DefaultValueFactory = static () => "workspace"
         };
 
         rootBuilder.Properties["workspace-name"] = rootBuilder.Properties["workspace-name"] with
         {
-            DefaultValueFactory = static _ => "default-workspace"
+            DefaultValueFactory = static () => "default-workspace"
         };
 
         var serveBuilder = GetRequiredSubcommandBuilder(rootBuilder, "serve");
         serveBuilder.Properties["port"] = serveBuilder.Properties["port"] with
         {
-            DefaultValueFactory = static _ => 8080,
+            DefaultValueFactory = static () => 8080,
             Validation = static value => (int)value is < 1 or > 65535 ? "port must be between 1 and 65535." : null
         };
 
@@ -251,7 +254,7 @@ internal static class Program
             case ParsingFinished<Cli> parsingFinished:
                 var command = new WorkspaceCommand();
                 ((IBindable)command).Bind(parsingFinished.Result);
-                PrintSuccess(command, Console.Out);
+                PrintSuccess(command, parsingFinished.Result, Console.Out);
                 return 0;
             case InvalidArgumentDetected invalidArgumentDetected:
                 PrintError("Invalid argument", $"{invalidArgumentDetected.Argument}: expected {invalidArgumentDetected.Expect}", invalidArgumentDetected.Exception);
@@ -283,10 +286,11 @@ internal static class Program
         return current;
     }
 
-    private static void PrintSuccess(WorkspaceCommand command, TextWriter output)
+    private static void PrintSuccess(WorkspaceCommand command, Cli cli, TextWriter output)
     {
         output.WriteLine("Parse succeeded.");
         output.WriteLine($"Command path: {BuildCommandPath(command)}");
+        output.WriteLine($"ToProgramArguments: {DescribeValue(cli.ToProgramArguments)}");
         output.WriteLine();
         PrintBoundCommand(command, output);
     }
@@ -368,6 +372,7 @@ internal static class Program
         {
             null => "null",
             string text => $"\"{text}\"",
+            Token token => DescribeValue(token.Value),
             bool boolean => boolean ? "true" : "false",
             DateOnly dateOnly => dateOnly.ToString("O"),
             TimeOnly timeOnly => timeOnly.ToString("O"),

@@ -85,7 +85,7 @@ public class ExportBindingGeneratorTests
         var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
         builder.Properties["retries"] = builder.Properties["retries"] with
         {
-            DefaultValueFactory = static _ => 7
+            DefaultValueFactory = static () => 7
         };
         ImmutableArray<Token> arguments =
         [
@@ -110,6 +110,51 @@ public class ExportBindingGeneratorTests
         await Assert.That(GetPropertyValue(command, "Retries")).IsEqualTo(7);
         await Assert.That(serve).IsNotNull();
         await Assert.That((bool)GetPropertyValue(serve!, "ForceOption")!).IsTrue();
+    }
+
+    [Test]
+    public async Task Generated_Binding_Preserves_Initializer_For_Absent_Optional_Members()
+    {
+        const string source = """
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [ExportSymbols]
+            [Bindable]
+            [ExportParsing]
+            [Command]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Input", new Document("Input summary", "Input help"))
+                        .Add("Endpoint", new Document("Endpoint summary", "Endpoint help"));
+
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                [Property]
+                [LongAlias("endpoint")]
+                public string Endpoint { get; set; } = "https://example.invalid";
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("payload")
+        ];
+
+        var scope = AssertFinishedCollection(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build()));
+        var command = Bind(result, "Fixtures.Command", scope);
+
+        await Assert.That(GetPropertyValue(command, "Input")).IsEqualTo("payload");
+        await Assert.That(GetPropertyValue(command, "Endpoint")).IsEqualTo("https://example.invalid");
     }
 
     [Test]

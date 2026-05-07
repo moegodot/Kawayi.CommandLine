@@ -84,7 +84,7 @@ public class ExportSymbolsGeneratorTests
         await Assert.That(property.Information.Name.Value).IsEqualTo("verbose");
         await Assert.That(property.Information.Name.Visible).IsFalse();
         await Assert.That(property.Requirement).IsTrue();
-        await Assert.That(property.NumArgs).IsEqualTo(ValueRange.ZeroOrMore);
+        await Assert.That(property.NumArgs).IsEqualTo(ValueRange.ZeroOrOne);
         await Assert.That(property.ValueName).IsEqualTo("flag");
         await Assert.That(property.LongName["verbose"]).IsEqualTo(new NameWithVisibility("verbose", true));
         await Assert.That(property.ShortName["v"]).IsEqualTo(new NameWithVisibility("v", false));
@@ -372,7 +372,7 @@ public class ExportSymbolsGeneratorTests
         }
 
         await Assert.That(property.ValueName).IsNull();
-        await Assert.That(property.NumArgs).IsEqualTo(ValueRange.ZeroOrMore);
+        await Assert.That(property.NumArgs).IsEqualTo(ValueRange.One);
     }
 
     [Test]

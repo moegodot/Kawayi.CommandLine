@@ -34,7 +34,7 @@ public class TokenizerTests
         await Assert.That(result[1]).IsTypeOf<ShortOptionToken>().And.EqualTo(new("s"));
         await Assert.That(result[2]).IsTypeOf<LongOptionToken>().And.EqualTo(new("long"));
         await Assert.That(result[3]).IsTypeOf<ArgumentOrCommandToken>().And.EqualTo(new("or command"));
-        await Assert.That(result[4]).IsTypeOf<ShortOptionToken>().And.EqualTo(new("s short"));
+        await Assert.That(result[4]).IsTypeOf<ShortOptionToken>().And.EqualTo(new ShortOptionToken("s", " short"));
         await Assert.That(result[5]).IsTypeOf<LongOptionToken>().And.EqualTo(new(" long"));
         await Assert.That(result[6]).IsTypeOf<ArgumentOrCommandToken>().And.EqualTo(new("  "));
     }
@@ -50,7 +50,7 @@ public class TokenizerTests
 
         await Assert.That(result.Length).EqualTo(2);
         await Assert.That(result[0]).IsTypeOf<ShortOptionToken>().And.EqualTo(new(string.Empty));
-        await Assert.That(result[1]).IsTypeOf<LongOptionToken>().And.EqualTo(new(string.Empty));
+        await Assert.That(result[1]).IsTypeOf<OptionTerminatorToken>();
     }
 
     [Test]
@@ -81,6 +81,36 @@ public class TokenizerTests
         await Assert.That(result[0]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("count"));
         await Assert.That(result[1]).IsTypeOf<ShortOptionToken>().And.EqualTo(new ShortOptionToken("1"));
         await Assert.That(result[2]).IsTypeOf<LongOptionToken>().And.EqualTo(new LongOptionToken("linker-opts"));
-        await Assert.That(result[3]).IsTypeOf<ShortOptionToken>().And.EqualTo(new ShortOptionToken("L/bin/foo.a"));
+        await Assert.That(result[3]).IsTypeOf<ShortOptionToken>().And.EqualTo(new ShortOptionToken("L", "/bin/foo.a"));
+    }
+
+    [Test]
+    public async Task OptionTerminator_Tokenizes_Remaining_Inputs_As_ArgumentTokens()
+    {
+        ImmutableArray<string> input = ["payload", "--", "--child", "-x"];
+
+        var tokenizer = new Tokenizer();
+
+        var result = tokenizer.Tokenize(input);
+
+        await Assert.That(result.Length).IsEqualTo(4);
+        await Assert.That(result[0]).IsTypeOf<ArgumentOrCommandToken>().And.EqualTo(new ArgumentOrCommandToken("payload"));
+        await Assert.That(result[1]).IsTypeOf<OptionTerminatorToken>();
+        await Assert.That(result[2]).IsTypeOf<ArgumentToken>().And.EqualTo(new ArgumentToken("--child"));
+        await Assert.That(result[3]).IsTypeOf<ArgumentToken>().And.EqualTo(new ArgumentToken("-x"));
+    }
+
+    [Test]
+    public async Task EscapedDash_Tokenizes_As_ArgumentToken()
+    {
+        ImmutableArray<string> input = [@"\-1", @"\--literal"];
+
+        var tokenizer = new Tokenizer();
+
+        var result = tokenizer.Tokenize(input);
+
+        await Assert.That(result.Length).IsEqualTo(2);
+        await Assert.That(result[0]).IsTypeOf<ArgumentToken>().And.EqualTo(new ArgumentToken("-1"));
+        await Assert.That(result[1]).IsTypeOf<ArgumentToken>().And.EqualTo(new ArgumentToken("--literal"));
     }
 }
