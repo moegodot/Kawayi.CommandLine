@@ -19,13 +19,13 @@ internal static class DebugOutput
             return result;
         }
 
-        options.Output.Write(Render(options, result, context));
+        options.DebugOutput.Write(Render(options, result, context));
         return result;
     }
 
     private static string Render(ParsingOptions options, ParsingResult result, DebugContext? context)
     {
-        var text = new StyledStringBuilder(options.EnableStyle);
+        var text = new StyledStringBuilder(options.EnableStyledDebugOutput);
         var styleTable = options.StyleTable;
 
         text.AppendLine(styleTable.DebugTitleStyle, "Debug Parse Result");

@@ -11,8 +11,10 @@ namespace Kawayi.CommandLine.Abstractions;
 /// <param name="Program">The program metadata to expose to users.</param>
 /// <param name="VersionFlags">The tokens that trigger version output.</param>
 /// <param name="HelpFlags">The tokens that trigger help output.</param>
-/// <param name="Output">The text writer used for user-visible output.</param>
-/// <param name="EnableStyle">Whether ANSI styling is enabled.</param>
+/// <param name="Output">The text writer used for debug output.</param>
+/// <param name="DebugOutput">The text writer used for non-debug user-visible output, like `-h` or `--version`.</param>
+/// <param name="EnableStyledDebugOutput">Whether ANSI styling for <see cref="DebugOutput"/> is enabled.</param>
+/// <param name="EnableStyledOutput">Whether ANSI styling for <see cref="Output"/> is enabled.</param>
 /// <param name="Debug">Whether debug output is enabled.</param>
 /// <param name="StyleTable">The styles used for formatted output.</param>
 public sealed record ParsingOptions(
@@ -20,7 +22,9 @@ public sealed record ParsingOptions(
     ImmutableHashSet<Token> VersionFlags,
     ImmutableHashSet<Token> HelpFlags,
     TextWriter Output,
-    bool EnableStyle,
+    TextWriter DebugOutput,
+    bool EnableStyledDebugOutput,
+    bool EnableStyledOutput,
     bool Debug,
     StyleTable StyleTable
 )
@@ -122,7 +126,14 @@ public sealed record ParsingOptions(
     /// </summary>
     /// <param name="programInformation">The program metadata to expose to users.</param>
     public ParsingOptions(ProgramInformation programInformation)
-    : this(programInformation, DefaultVersionFlags, DefaultHelpFlags, Console.Out, DefaultStyle, DefaultDebug, StyleTable.Default)
+    : this(programInformation,
+           DefaultVersionFlags,
+           DefaultHelpFlags,
+           Console.Out,
+           Console.Out,
+           DefaultStyle,
+           DefaultDebug,
+           StyleTable.Default)
     {
     }
 
