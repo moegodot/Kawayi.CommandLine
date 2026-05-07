@@ -13,18 +13,18 @@ namespace Kawayi.CommandLine.Core;
 /// <summary>
 /// Parses supported collection and dictionary container types from command-line tokens.
 /// </summary>
-public class Containers
+public class ContainerParser
     : Abstractions.IParsable<ContainerType>
 {
-    private static readonly MethodInfo BuildSequenceContainerRuntimeMethod = typeof(Containers)
+    private static readonly MethodInfo BuildSequenceContainerRuntimeMethod = typeof(ContainerParser)
         .GetMethod(nameof(BuildSequenceContainerRuntime), BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"Method '{nameof(BuildSequenceContainerRuntime)}' was not found.");
 
-    private static readonly MethodInfo BuildDictionaryContainerForRuntimeKeyMethod = typeof(Containers)
+    private static readonly MethodInfo BuildDictionaryContainerForRuntimeKeyMethod = typeof(ContainerParser)
         .GetMethod(nameof(BuildDictionaryContainerForRuntimeKey), BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"Method '{nameof(BuildDictionaryContainerForRuntimeKey)}' was not found.");
 
-    private static readonly MethodInfo BuildDictionaryContainerForRuntimeValueMethod = typeof(Containers)
+    private static readonly MethodInfo BuildDictionaryContainerForRuntimeValueMethod = typeof(ContainerParser)
         .GetMethod(nameof(BuildDictionaryContainerForRuntimeValue), BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"Method '{nameof(BuildDictionaryContainerForRuntimeValue)}' was not found.");
 
@@ -361,7 +361,7 @@ public class Containers
         {
             return DebugOutput.Emit(options,
                                     new ParsingFinished<string>(rawValue),
-                                    new DebugContext(nameof(Containers),
+                                    new DebugContext(nameof(ContainerParser),
                                                      Tokens: [new ArgumentOrCommandToken(rawValue)],
                                                      TargetType: targetType,
                                                      SelectedToken: rawValue,
@@ -466,7 +466,7 @@ public class Containers
         }
 
         return new GotError(new NotSupportedException(
-            $"Type '{targetType.FullName}' is not supported by {nameof(Containers)}."));
+            $"Type '{targetType.FullName}' is not supported by {nameof(ContainerParser)}."));
     }
 
     private static ParsingResult EmitContainerDebug(ParsingOptions options,
@@ -476,7 +476,7 @@ public class Containers
     {
         return DebugOutput.Emit(options,
                                 result,
-                                new DebugContext(nameof(Containers),
+                                new DebugContext(nameof(ContainerParser),
                                                  Tokens: arguments,
                                                  TargetType: containerType.Container,
                                                  Expectation: containerType.Container.FullName
@@ -799,7 +799,7 @@ public class Containers
     private static ParsingResult CreateUnsupportedContainerResult(Type containerType)
     {
         return new GotError(new NotSupportedException(
-            $"Container '{containerType.FullName}' is not supported by {nameof(Containers)}."));
+            $"Container '{containerType.FullName}' is not supported by {nameof(ContainerParser)}."));
     }
 
     private static bool IsDictionaryContainer(Type genericDefinition)

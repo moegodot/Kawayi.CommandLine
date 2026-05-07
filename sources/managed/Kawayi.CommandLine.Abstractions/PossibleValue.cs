@@ -36,4 +36,4 @@ public sealed record CountablePossibleValues<T>(ImmutableArray<T> Candidates) : 
 /// Represents possible values described only by text.
 /// </summary>
 /// <param name="Description">The textual description of the possible values.</param>
-public sealed record DescripablePossibleValues(string Description) : PossibleValues();
+public sealed record DescribablePossibleValues(string Description) : PossibleValues();

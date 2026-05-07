@@ -17,7 +17,7 @@ namespace Kawayi.CommandLine.Abstractions;
 /// <param name="Argument">The ordered positional argument definitions.</param>
 public readonly record struct CliSchema(
     Type? GeneratedFrom,
-    ImmutableDictionary<OptionToken, CommandDefinition> SubcommandDefinitions,
+    ImmutableDictionary<ArgumentOrCommandToken, CommandDefinition> SubcommandDefinitions,
     ImmutableDictionary<ArgumentOrCommandToken, CliSchema> Subcommands,
     ImmutableDictionary<OptionToken, PropertyDefinition> Properties,
     ImmutableList<ParameterDefinition> Argument)

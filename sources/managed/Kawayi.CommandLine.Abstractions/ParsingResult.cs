@@ -42,21 +42,21 @@ public abstract record ShouldExit(bool Success) : ParsingResult;
 /// </summary>
 /// <param name="FlagAction">The action to execute for the flag.</param>
 /// <param name="TriggerArgument">The argument that triggered the flag.</param>
-public abstract record FlagDetected(Action FlagAction, string TriggerArgument) : ShouldExit(true);
+public abstract record FlagDetected(Action FlagAction, Token TriggerArgument) : ShouldExit(true);
 
 /// <summary>
 /// Represents detection of a version flag.
 /// </summary>
 /// <param name="FlagAction">The action to execute for the version flag.</param>
 /// <param name="TriggerArgument">The argument that triggered the flag.</param>
-public sealed record VersionFlagsDetected(Action FlagAction, string TriggerArgument) : FlagDetected(FlagAction, TriggerArgument);
+public sealed record VersionFlagsDetected(Action FlagAction, Token TriggerArgument) : FlagDetected(FlagAction, TriggerArgument);
 
 /// <summary>
 /// Represents detection of a help flag.
 /// </summary>
 /// <param name="FlagAction">The action to execute for the help flag.</param>
 /// <param name="TriggerArgument">The argument that triggered the flag.</param>
-public sealed record HelpFlagsDetected(Action FlagAction, string TriggerArgument) : FlagDetected(FlagAction, TriggerArgument);
+public sealed record HelpFlagsDetected(Action FlagAction, Token TriggerArgument) : FlagDetected(FlagAction, TriggerArgument);
 
 /// <summary>
 /// Represents a parsing failure.

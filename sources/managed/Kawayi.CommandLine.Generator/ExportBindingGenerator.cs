@@ -257,7 +257,7 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
             switch (member.Kind)
             {
                 case MemberKind.Argument:
-                    AppendTypedMemberBinding(builder, member, "global::Kawayi.CommandLine.Abstractions.ArgumentDefinition", indentLevel + 1);
+                    AppendTypedMemberBinding(builder, member, "global::Kawayi.CommandLine.Abstractions.ParameterDefinition", indentLevel + 1);
                     break;
                 case MemberKind.Property:
                     AppendTypedMemberBinding(builder, member, "global::Kawayi.CommandLine.Abstractions.PropertyDefinition", indentLevel + 1);

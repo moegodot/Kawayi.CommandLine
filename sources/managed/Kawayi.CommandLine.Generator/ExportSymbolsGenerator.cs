@@ -190,7 +190,7 @@ public sealed class ExportSymbolsGenerator : IIncrementalGenerator
     private static string GenerateArgumentExpression(MemberModel member)
     {
         var argumentExpression =
-            $"new global::Kawayi.CommandLine.Abstractions.ArgumentDefinition({GenerateDefinitionInformationExpression(member)}, null, new global::Kawayi.CommandLine.Abstractions.ValueRange({member.ValueRangeMinimum}, {member.ValueRangeMaximum}), typeof({member.TypeName}), {FormatBool(member.VisibleRequirement)}, {FormatBool(member.RequirementIfNull)})";
+            $"new global::Kawayi.CommandLine.Abstractions.ParameterDefinition({GenerateDefinitionInformationExpression(member)}, null, new global::Kawayi.CommandLine.Abstractions.ValueRange({member.ValueRangeMinimum}, {member.ValueRangeMaximum}), typeof({member.TypeName}), {FormatBool(member.VisibleRequirement)}, {FormatBool(member.RequirementIfNull)})";
         var initializers = new List<string>(1);
         AddValidationInitializer(initializers, member);
 

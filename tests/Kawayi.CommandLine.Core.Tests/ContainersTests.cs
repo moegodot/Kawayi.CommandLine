@@ -14,11 +14,11 @@ public sealed class ContainersTests
     [Test]
     public async Task CreateParsing_Returns_Empty_Containers_When_No_Arguments_Are_Provided()
     {
-        var arrayResult = Containers.CreateParsing(
+        var arrayResult = ContainerParser.CreateParsing(
             DefaultOptions,
             [],
             new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
-        var dictionaryResult = Containers.CreateParsing(
+        var dictionaryResult = ContainerParser.CreateParsing(
             DefaultOptions,
             [],
             new ContainerType(typeof(ImmutableDictionary<string, int>), typeof(string), typeof(int)));
@@ -37,7 +37,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("3")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
@@ -54,7 +54,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("FALSE")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableList<bool>), null, typeof(bool)));
@@ -80,7 +80,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken(second.ToString())
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableHashSet<Guid>), null, typeof(Guid)));
@@ -104,7 +104,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("2")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableArray<SampleMode>), null, typeof(SampleMode)));
@@ -128,7 +128,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("answer=42")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableDictionary<string, int>), typeof(string), typeof(int)));
@@ -145,7 +145,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("advanced=basic")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableDictionary<SampleMode, SampleMode>), typeof(SampleMode), typeof(SampleMode)));
@@ -168,7 +168,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("plain=value=tail")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableSortedDictionary<string, string>), typeof(string), typeof(string)));
@@ -187,7 +187,7 @@ public sealed class ContainersTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("not-an-int")];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
@@ -200,7 +200,7 @@ public sealed class ContainersTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways")];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableArray<SampleMode>), null, typeof(SampleMode)));
@@ -213,7 +213,7 @@ public sealed class ContainersTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways=basic")];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableDictionary<SampleMode, SampleMode>), typeof(SampleMode), typeof(SampleMode)));
@@ -226,7 +226,7 @@ public sealed class ContainersTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(@"missing\=separator")];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableDictionary<string, string>), typeof(string), typeof(string)));
@@ -239,7 +239,7 @@ public sealed class ContainersTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("1.0=value")];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableDictionary<Version, string>), typeof(Version), typeof(string)));
@@ -256,7 +256,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("https://example.com/b")
         ];
 
-        var result = Containers.CreateParsing(
+        var result = ContainerParser.CreateParsing(
             DefaultOptions,
             arguments,
             new ContainerType(typeof(ImmutableSortedSet<Uri>), null, typeof(Uri)));

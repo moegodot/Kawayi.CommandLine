@@ -157,7 +157,7 @@ internal static class Program
         };
         watchBuilder.Properties["sink"] = watchBuilder.Properties["sink"] with
         {
-            PossibleValues = new DescripablePossibleValues("stdout, file or any custom sink plugin")
+            PossibleValues = new DescribablePossibleValues("stdout, file or any custom sink plugin")
         };
     }
 

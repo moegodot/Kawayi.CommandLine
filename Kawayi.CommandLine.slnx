@@ -37,6 +37,7 @@
     <Project Path="sources\managed\Kawayi.ExitCodes\Kawayi.ExitCodes.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Kawayi.CommandLine.Abstractions.Tests/Kawayi.CommandLine.Abstractions.Tests.csproj" />
     <Project Path="tests/Kawayi.CommandLine.Core.Tests/Kawayi.CommandLine.Core.Tests.csproj" />
     <Project Path="tests/Kawayi.CommandLine.Generator.Tests/Kawayi.CommandLine.Generator.Tests.csproj" />
     <Project Path="tests/Kawayi.Escapes.Tests/Kawayi.Escapes.Tests.csproj" />

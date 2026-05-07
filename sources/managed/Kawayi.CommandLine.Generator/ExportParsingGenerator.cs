@@ -224,15 +224,18 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "public static global::Kawayi.CommandLine.Abstractions.IParsingBuilder ExportParsing(global::Kawayi.CommandLine.Abstractions.ParsingOptions parsingOptions)");
+            "public static global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder ExportParsing(global::Kawayi.CommandLine.Abstractions.ParsingOptions parsingOptions)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(parsingOptions);");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var builder = new global::Kawayi.CommandLine.Core.ParsingBuilder(parsingOptions);");
+        GeneratorSource.AppendIndentedLine(
+            builder,
+            indentLevel + 1,
+            "var builder = new global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder(global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.CommandDefinition>(), global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder>(), global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.PropertyDefinition>(), global::System.Collections.Immutable.ImmutableList.CreateBuilder<global::Kawayi.CommandLine.Abstractions.ParameterDefinition>());");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var symbol in Symbols)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "switch (symbol)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.ArgumentDefinition argument:");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.ParameterDefinition argument:");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "builder.Argument.Add(argument);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 4, "break;");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "case global::Kawayi.CommandLine.Abstractions.PropertyDefinition property:");
@@ -299,7 +302,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var snapshot = builder.Build();");
         GeneratorSource.AppendIndentedLine(builder,
                            indentLevel + 1,
-                           "return global::Kawayi.CommandLine.Core.ParsingBuilder.CreateParsing(options, arguments, snapshot);");
+                           "return global::Kawayi.CommandLine.Core.CliSchemaParser.CreateParsing(options, arguments, snapshot);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
 
         if (target.Subcommands.Length == 0)
@@ -313,7 +316,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             GeneratorSource.AppendIndentedLine(
                 builder,
                 indentLevel,
-                "private static string GetRequiredSubcommandKey(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, string commandName)");
+                "private static string GetRequiredSubcommandKey(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, string commandName)");
             GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
             GeneratorSource.AppendIndentedLine(
                 builder,
@@ -353,7 +356,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "private static void MergeGlobalSubcommand(global::Kawayi.CommandLine.Abstractions.IParsingBuilder builder, global::Kawayi.CommandLine.Abstractions.IParsingBuilder childBuilder, string childTypeName, string memberName)");
+            "private static void MergeGlobalSubcommand(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder childBuilder, string childTypeName, string memberName)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var argument in childBuilder.Argument)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");

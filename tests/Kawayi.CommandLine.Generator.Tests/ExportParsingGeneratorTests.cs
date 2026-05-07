@@ -64,10 +64,10 @@ public class ExportParsingGeneratorTests
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
-        await Assert.That(snapshot.Properties.ContainsKey("verbose-option")).IsTrue();
-        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("serve-command")).IsTrue();
-        await Assert.That(snapshot.Subcommands.ContainsKey(exportedSubcommand.Information.Name.Value)).IsTrue();
-        await Assert.That(snapshot.Subcommands[exportedSubcommand.Information.Name.Value].Properties.ContainsKey("force-option")).IsTrue();
+        await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("verbose-option"))).IsTrue();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("serve-command"))).IsTrue();
+        await Assert.That(snapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken(exportedSubcommand.Information.Name.Value))).IsTrue();
+        await Assert.That(snapshot.Subcommands[new ArgumentOrCommandToken(exportedSubcommand.Information.Name.Value)].Properties.ContainsKey(new LongOptionToken("force-option"))).IsTrue();
     }
 
     [Test]
@@ -170,9 +170,9 @@ public class ExportParsingGeneratorTests
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsingExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
-        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("serve-command")).IsTrue();
-        await Assert.That(snapshot.Subcommands.ContainsKey(exportedSubcommand.Information.Name.Value)).IsTrue();
-        await Assert.That(snapshot.Subcommands[exportedSubcommand.Information.Name.Value].Properties.ContainsKey("force-option")).IsTrue();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("serve-command"))).IsTrue();
+        await Assert.That(snapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken(exportedSubcommand.Information.Name.Value))).IsTrue();
+        await Assert.That(snapshot.Subcommands[new ArgumentOrCommandToken(exportedSubcommand.Information.Name.Value)].Properties.ContainsKey(new LongOptionToken("force-option"))).IsTrue();
     }
 
     [Test]
@@ -247,11 +247,11 @@ public class ExportParsingGeneratorTests
         var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
         var childValues = AssertFinishedCollection(subcommand.ContinueParseAction());
 
-        await Assert.That(snapshot.Properties.ContainsKey("force-option")).IsTrue();
-        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("global")).IsFalse();
-        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey("watch")).IsTrue();
-        await Assert.That(snapshot.Subcommands.ContainsKey("global")).IsFalse();
-        await Assert.That(snapshot.Subcommands.ContainsKey("watch")).IsTrue();
+        await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("force-option"))).IsTrue();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("global"))).IsFalse();
+        await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("watch"))).IsTrue();
+        await Assert.That(snapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken("global"))).IsFalse();
+        await Assert.That(snapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken("watch"))).IsTrue();
         await Assert.That(HasExplicitString(parentValues, "input", "payload")).IsTrue();
         await Assert.That(HasExplicitBoolean(parentValues, "force-option")).IsTrue();
         await Assert.That(childValues.Command?.Information.Name.Value).IsEqualTo("watch");
@@ -431,7 +431,7 @@ public class ExportParsingGeneratorTests
             .ToBuilder();
 
         references.Add(MetadataReference.CreateFromFile(typeof(CommandAttribute).Assembly.Location));
-        references.Add(MetadataReference.CreateFromFile(typeof(ParsingBuilder).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(CliSchemaParser).Assembly.Location));
         references.Add(MetadataReference.CreateFromFile(typeof(IParsingExporter).Assembly.Location));
 
         return references.ToImmutable();
