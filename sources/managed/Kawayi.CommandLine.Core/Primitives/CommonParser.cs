@@ -2,227 +2,224 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
-using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
 /// <summary>
 /// Parses common framework types from command-line tokens.
 /// </summary>
-public sealed class CommonParser
+public sealed class CommonParser(Type targetType) : IBuiltInTypeProvider
 {
-    /// <summary>
-    /// Parses a <see cref="Guid"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, Guid initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "Guid",
-              static (string value, out Guid result) => Guid.TryParse(value, out result));
+    private readonly Type _targetType = ValidateTargetType(targetType);
 
     /// <summary>
-    /// Parses a <see cref="string"/> value from the supplied tokens.
+    /// Parses a common framework value from the supplied tokens.
     /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments,
-                                              string initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "string",
-              static (string value, out string result) =>
-              {
-                  result = value;
-                  return true;
-              });
+    public bool TryParse(ImmutableArray<Token> input,
+                         TypeProviders typeProviders,
+                         string? format,
+                         [NotNullWhen(true)] out object? result,
+                         [NotNullWhen(false)] out string? error)
+    {
+        if (input.IsDefaultOrEmpty)
+        {
+            return TryGetDefaultValue(out result, out error);
+        }
 
-    /// <summary>
-    /// Parses a <see cref="Uri"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, Uri initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "Uri at UriKind.RelativeOrAbsolute",
-              static (string value, out Uri result) =>
-              {
-                  if (Uri.TryCreate(value, UriKind.RelativeOrAbsolute, out var uri) && uri is not null)
-                  {
-                      result = uri;
-                      return true;
-                  }
+        var value = input[^1].Value;
 
-                  result = null!;
-                  return false;
-              });
+        switch (Type.GetTypeCode(_targetType))
+        {
+            case TypeCode.String:
+                result = value;
+                error = null;
+                return true;
+            case TypeCode.Object when _targetType == typeof(Guid):
+                if (Guid.TryParse(value, out var parsedGuid))
+                {
+                    result = parsedGuid;
+                    error = null;
+                    return true;
+                }
 
-    /// <summary>
-    /// Parses a <see cref="DateTime"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <param name="format">The optional exact format used during parsing.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              DateTime initialState,
-                                              string? format = null) =>
-        ParseTemporal(options,
-                      arguments,
-                      initialState,
-                      format,
-                      "DateTime",
-                      static (string value, out DateTime result) =>
-                          DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result),
-                      static (string value, string exactFormat, out DateTime result) =>
-                          DateTime.TryParseExact(value, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
+                result = null;
+                error = "Guid";
+                return false;
+            case TypeCode.Object when _targetType == typeof(Uri):
+                if (Uri.TryCreate(value, UriKind.RelativeOrAbsolute, out var uri) && uri is not null)
+                {
+                    result = uri;
+                    error = null;
+                    return true;
+                }
 
-    /// <summary>
-    /// Parses a <see cref="DateTimeOffset"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <param name="format">The optional exact format used during parsing.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              DateTimeOffset initialState,
-                                              string? format = null) =>
-        ParseTemporal(options,
-                      arguments,
-                      initialState,
-                      format,
-                      "DateTimeOffset",
-                      static (string value, out DateTimeOffset result) =>
-                          DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result),
-                      static (string value, string exactFormat, out DateTimeOffset result) =>
-                          DateTimeOffset.TryParseExact(value, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
+                result = null;
+                error = "Uri at UriKind.RelativeOrAbsolute";
+                return false;
+            case TypeCode.DateTime:
+                return TryParseTemporal(
+                    value,
+                    format,
+                    "DateTime",
+                    static (string raw, out DateTime parsed) =>
+                        DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    static (string raw, string exactFormat, out DateTime parsed) =>
+                        DateTime.TryParseExact(raw, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    out result,
+                    out error);
+            case TypeCode.Object when _targetType == typeof(DateTimeOffset):
+                return TryParseTemporal(
+                    value,
+                    format,
+                    "DateTimeOffset",
+                    static (string raw, out DateTimeOffset parsed) =>
+                        DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    static (string raw, string exactFormat, out DateTimeOffset parsed) =>
+                        DateTimeOffset.TryParseExact(raw, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    out result,
+                    out error);
+            case TypeCode.Object when _targetType == typeof(DateOnly):
+                return TryParseTemporal(
+                    value,
+                    format,
+                    "DateOnly",
+                    static (string raw, out DateOnly parsed) =>
+                        DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    static (string raw, string exactFormat, out DateOnly parsed) =>
+                        DateOnly.TryParseExact(raw, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    out result,
+                    out error);
+            case TypeCode.Object when _targetType == typeof(TimeOnly):
+                return TryParseTemporal(
+                    value,
+                    format,
+                    "TimeOnly",
+                    static (string raw, out TimeOnly parsed) =>
+                        TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    static (string raw, string exactFormat, out TimeOnly parsed) =>
+                        TimeOnly.TryParseExact(raw, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed),
+                    out result,
+                    out error);
+            default:
+                result = null;
+                error = _targetType.FullName ?? _targetType.Name;
+                return false;
+        }
+    }
 
-    /// <summary>
-    /// Parses a <see cref="DateOnly"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <param name="format">The optional exact format used during parsing.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              DateOnly initialState,
-                                              string? format = null) =>
-        ParseTemporal(options,
-                      arguments,
-                      initialState,
-                      format,
-                      "DateOnly",
-                      static (string value, out DateOnly result) =>
-                          DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result),
-                      static (string value, string exactFormat, out DateOnly result) =>
-                          DateOnly.TryParseExact(value, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
+    private static Type ValidateTargetType(Type targetType)
+    {
+        ArgumentNullException.ThrowIfNull(targetType);
 
-    /// <summary>
-    /// Parses a <see cref="TimeOnly"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <param name="format">The optional exact format used during parsing.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              TimeOnly initialState,
-                                              string? format = null) =>
-        ParseTemporal(options,
-                      arguments,
-                      initialState,
-                      format,
-                      "TimeOnly",
-                      static (string value, out TimeOnly result) =>
-                          TimeOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result),
-                      static (string value, string exactFormat, out TimeOnly result) =>
-                          TimeOnly.TryParseExact(value, exactFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
+        if (targetType == typeof(string)
+            || targetType == typeof(Guid)
+            || targetType == typeof(Uri)
+            || targetType == typeof(DateTime)
+            || targetType == typeof(DateTimeOffset)
+            || targetType == typeof(DateOnly)
+            || targetType == typeof(TimeOnly))
+        {
+            return targetType;
+        }
+
+        throw new ArgumentException($"Type '{targetType.FullName}' is not a supported common parser target.", nameof(targetType));
+    }
+
+    private bool TryGetDefaultValue([NotNullWhen(true)] out object? result,
+                                    [NotNullWhen(false)] out string? error)
+    {
+        if (_targetType == typeof(string))
+        {
+            result = string.Empty;
+            error = null;
+            return true;
+        }
+
+        if (_targetType == typeof(Uri))
+        {
+            result = new Uri(string.Empty, UriKind.Relative);
+            error = null;
+            return true;
+        }
+
+        if (_targetType == typeof(Guid))
+        {
+            result = Guid.Empty;
+            error = null;
+            return true;
+        }
+
+        if (_targetType == typeof(DateTime))
+        {
+            result = default(DateTime);
+            error = null;
+            return true;
+        }
+
+        if (_targetType == typeof(DateTimeOffset))
+        {
+            result = default(DateTimeOffset);
+            error = null;
+            return true;
+        }
+
+        if (_targetType == typeof(DateOnly))
+        {
+            result = default(DateOnly);
+            error = null;
+            return true;
+        }
+
+        if (_targetType == typeof(TimeOnly))
+        {
+            result = default(TimeOnly);
+            error = null;
+            return true;
+        }
+
+        result = null;
+        error = _targetType.FullName ?? _targetType.Name;
+        return false;
+    }
 
     private delegate bool TryParseDelegate<T>(string value, out T result);
     private delegate bool TryParseExactDelegate<T>(string value, string format, out T result);
 
-    private static ParsingResult ParseTemporal<T>(ParsingOptions options,
-                                                  ImmutableArray<Token> arguments,
-                                                  T initialState,
-                                                  string? format,
-                                                  string typeName,
-                                                  TryParseDelegate<T> tryParse,
-                                                  TryParseExactDelegate<T> tryParseExact)
+    private static bool TryParseTemporal<T>(string value,
+                                            string? format,
+                                            string typeName,
+                                            TryParseDelegate<T> tryParse,
+                                            TryParseExactDelegate<T> tryParseExact,
+                                            [NotNullWhen(true)] out object? result,
+                                            [NotNullWhen(false)] out string? error)
     {
         if (string.IsNullOrWhiteSpace(format))
         {
-            return Parse(options,
-                         arguments,
-                         initialState,
-                         $"{typeName} at DateTimeStyles.None",
-                         tryParse);
+            if (tryParse(value, out var parsedValue))
+            {
+                result = parsedValue!;
+                error = null;
+                return true;
+            }
+
+            result = null;
+            error = $"{typeName} at DateTimeStyles.None";
+            return false;
         }
 
         var exactFormat = format!;
-        return Parse(options,
-                     arguments,
-                     initialState,
-                     $"{typeName} at exact format '{exactFormat}'",
-                     (string value, out T result) => tryParseExact(value, exactFormat, out result));
-    }
-
-    private static ParsingResult Parse<T>(ParsingOptions options,
-                                          ImmutableArray<Token> arguments,
-                                          T initialState,
-                                          string expect,
-                                          TryParseDelegate<T> tryParse)
-    {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
-
-        if (arguments.IsDefaultOrEmpty)
+        if (tryParseExact(value, exactFormat, out var exactValue))
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<T>(initialState),
-                                    new DebugContext(nameof(CommonParser),
-                                                     Tokens: arguments,
-                                                     TargetType: typeof(T),
-                                                     Expectation: expect));
+            result = exactValue!;
+            error = null;
+            return true;
         }
 
-        var token = arguments[^1];
-
-        if (tryParse(token.Value, out var parsedValue))
-        {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<T>(parsedValue),
-                                    new DebugContext(nameof(CommonParser),
-                                                     Tokens: arguments,
-                                                     TargetType: typeof(T),
-                                                     Expectation: expect,
-                                                     SelectedToken: selectedToken));
-        }
-
-        return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.Value, expect, null),
-                                new DebugContext(nameof(CommonParser),
-                                                 Tokens: arguments,
-                                                 TargetType: typeof(T),
-                                                 Expectation: expect,
-                                                 SelectedToken: selectedToken));
+        result = null;
+        error = $"{typeName} at exact format '{exactFormat}'";
+        return false;
     }
 }

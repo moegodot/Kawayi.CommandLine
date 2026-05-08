@@ -2,16 +2,16 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
-using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
 /// <summary>
 /// Parses integral numeric types from command-line tokens.
 /// </summary>
-public sealed class NumberParser
+public sealed class NumberParser(Type targetType) : IBuiltInTypeProvider
 {
     /// <summary>
     /// Gets the default number styles used for integral parsing.
@@ -19,167 +19,97 @@ public sealed class NumberParser
     public static NumberStyles DefaultNumberStyles { get; }
         = NumberStyles.Integer;
 
-    /// <summary>
-    /// Parses a <see cref="byte"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              byte initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "byte at NumberStyles.Integer",
-              static (string value, out byte result) =>
-                  byte.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
+    private readonly Type _targetType = ValidateTargetType(targetType);
+    private readonly string _expectation = $"{targetType.Name} at NumberStyles.Integer";
 
     /// <summary>
-    /// Parses an <see cref="sbyte"/> value from the supplied tokens.
+    /// Parses an integral numeric value from the supplied tokens.
     /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, sbyte initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "sbyte at NumberStyles.Integer",
-              static (string value, out sbyte result) =>
-                  sbyte.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses a <see cref="ushort"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, ushort initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "ushort at NumberStyles.Integer",
-              static (string value, out ushort result) =>
-                  ushort.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses a <see cref="short"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, short initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "short at NumberStyles.Integer",
-              static (string value, out short result) =>
-                  short.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses an <see cref="int"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, int initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "int at NumberStyles.Integer",
-              static (string value, out int result) =>
-                  int.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses a <see cref="uint"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, uint initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "uint at NumberStyles.Integer",
-              static (string value, out uint result) =>
-                  uint.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses a <see cref="long"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, long initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "long at NumberStyles.Integer",
-              static (string value, out long result) =>
-                  long.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses a <see cref="ulong"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, ulong initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "ulong at NumberStyles.Integer",
-              static (string value, out ulong result) =>
-                  ulong.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    private delegate bool TryParseDelegate<T>(string value, out T result);
-
-    private static ParsingResult Parse<T>(ParsingOptions options,
-                                          ImmutableArray<Token> arguments,
-                                          T initialState,
-                                          string expect,
-                                          TryParseDelegate<T> tryParse)
+    public bool TryParse(ImmutableArray<Token> input,
+                         TypeProviders typeProviders,
+                         string? format,
+                         [NotNullWhen(true)] out object? result,
+                         [NotNullWhen(false)] out string? error)
     {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
-
-        if (arguments.IsDefaultOrEmpty)
+        if (input.IsDefaultOrEmpty)
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<T>(initialState),
-                                    new DebugContext(nameof(NumberParser),
-                                                     Tokens: arguments,
-                                                     TargetType: typeof(T),
-                                                     Expectation: expect));
+            result = CreateDefaultValue(_targetType);
+            error = null;
+            return true;
         }
 
-        var token = arguments[^1];
+        var token = input[^1].Value;
 
-        if (tryParse(token.Value, out var parsedValue))
+        if (TryParseCore(token, out result))
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<T>(parsedValue),
-                                    new DebugContext(nameof(NumberParser),
-                                                     Tokens: arguments,
-                                                     TargetType: typeof(T),
-                                                     Expectation: expect,
-                                                     SelectedToken: selectedToken));
+            error = null;
+            return true;
         }
 
-        return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.Value, expect, null),
-                                new DebugContext(nameof(NumberParser),
-                                                 Tokens: arguments,
-                                                 TargetType: typeof(T),
-                                                 Expectation: expect,
-                                                 SelectedToken: selectedToken));
+        result = null;
+        error = _expectation;
+        return false;
+    }
+
+    private bool TryParseCore(string value, [NotNullWhen(true)] out object? result)
+    {
+        switch (Type.GetTypeCode(_targetType))
+        {
+            case TypeCode.Byte when byte.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedByte):
+                result = parsedByte;
+                return true;
+            case TypeCode.SByte when sbyte.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedSByte):
+                result = parsedSByte;
+                return true;
+            case TypeCode.UInt16 when ushort.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedUInt16):
+                result = parsedUInt16;
+                return true;
+            case TypeCode.Int16 when short.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedInt16):
+                result = parsedInt16;
+                return true;
+            case TypeCode.UInt32 when uint.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedUInt32):
+                result = parsedUInt32;
+                return true;
+            case TypeCode.Int32 when int.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedInt32):
+                result = parsedInt32;
+                return true;
+            case TypeCode.UInt64 when ulong.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedUInt64):
+                result = parsedUInt64;
+                return true;
+            case TypeCode.Int64 when long.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedInt64):
+                result = parsedInt64;
+                return true;
+            default:
+                result = null;
+                return false;
+        }
+    }
+
+    private static Type ValidateTargetType(Type targetType)
+    {
+        ArgumentNullException.ThrowIfNull(targetType);
+
+        return Type.GetTypeCode(targetType) switch
+        {
+            TypeCode.Byte or TypeCode.SByte or TypeCode.UInt16 or TypeCode.Int16 or TypeCode.UInt32 or TypeCode.Int32 or TypeCode.UInt64 or TypeCode.Int64
+                => targetType,
+            _ => throw new ArgumentException($"Type '{targetType.FullName}' is not a supported integral type.", nameof(targetType))
+        };
+    }
+
+    private static object CreateDefaultValue(Type targetType)
+    {
+        return Type.GetTypeCode(targetType) switch
+        {
+            TypeCode.Byte => default(byte),
+            TypeCode.SByte => default(sbyte),
+            TypeCode.UInt16 => default(ushort),
+            TypeCode.Int16 => default(short),
+            TypeCode.UInt32 => default(uint),
+            TypeCode.Int32 => default(int),
+            TypeCode.UInt64 => default(ulong),
+            TypeCode.Int64 => default(long),
+            _ => throw new InvalidOperationException($"Unable to create a default value for '{targetType.FullName}'.")
+        };
     }
 }

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Core.Primitives;
@@ -9,61 +10,46 @@ namespace Kawayi.CommandLine.Core.Primitives;
 /// <summary>
 /// Parses enumeration values when the target enum type is only known at runtime.
 /// </summary>
-public sealed class EnumParser
+public sealed class EnumParser : IBuiltInExtendedTypeProvider
 {
     /// <summary>
-    /// Parses an enum value from the supplied tokens.
+    /// Attempts to parse an enum value from the supplied tokens.
     /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="enumType">The enum type to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              Type enumType,
-                                              object initialState)
+    public bool TryParse(ImmutableArray<Token> input,
+                         TypeProviders typeProviders,
+                         Type symbolType,
+                         string? format,
+                         [NotNullWhen(true)] out object? result,
+                         out string? error)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(enumType);
+        ArgumentNullException.ThrowIfNull(symbolType);
 
-        if (!enumType.IsEnum)
+        if (!symbolType.IsEnum)
         {
-            throw new ArgumentException($"Type '{enumType.FullName}' is not an enum.", nameof(enumType));
+            result = null;
+            error = null;
+            return false;
         }
 
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
-        var expectation = $"{enumType.Name} enum";
-
-        if (arguments.IsDefaultOrEmpty)
+        if (input.IsDefaultOrEmpty)
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<object>(initialState),
-                                    new DebugContext(nameof(EnumParser),
-                                                     Tokens: arguments,
-                                                     TargetType: enumType,
-                                                     Expectation: expectation));
+            result = Enum.ToObject(symbolType, 0);
+            error = null;
+            return true;
         }
 
-        var token = arguments[^1];
+        var expectation = $"{symbolType.Name} enum";
+        var token = input[^1].Value;
 
-        if (Enum.TryParse(enumType, token.Value, true, out var parsedValue) && parsedValue is not null)
+        if (Enum.TryParse(symbolType, token, true, out var parsedValue) && parsedValue is not null)
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<object>(parsedValue),
-                                    new DebugContext(nameof(EnumParser),
-                                                     Tokens: arguments,
-                                                     TargetType: enumType,
-                                                     Expectation: expectation,
-                                                     SelectedToken: selectedToken));
+            result = parsedValue;
+            error = null;
+            return true;
         }
 
-        return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.Value, expectation, null),
-                                new DebugContext(nameof(EnumParser),
-                                                 Tokens: arguments,
-                                                 TargetType: enumType,
-                                                 Expectation: expectation,
-                                                 SelectedToken: selectedToken));
+        result = null;
+        error = expectation;
+        return false;
     }
 }

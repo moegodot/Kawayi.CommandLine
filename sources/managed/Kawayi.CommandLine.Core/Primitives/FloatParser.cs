@@ -2,16 +2,16 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
-using Kawayi.CommandLine.Core;
 
 namespace Kawayi.CommandLine.Core.Primitives;
 
 /// <summary>
 /// Parses floating-point numeric types from command-line tokens.
 /// </summary>
-public sealed class FloatParser
+public sealed class FloatParser(Type targetType) : IBuiltInTypeProvider
 {
     /// <summary>
     /// Gets the default number styles used for floating-point parsing.
@@ -19,90 +19,77 @@ public sealed class FloatParser
     public static NumberStyles DefaultNumberStyles { get; }
         = NumberStyles.Float;
 
-    /// <summary>
-    /// Parses a <see cref="float"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, float initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "float at NumberStyles.Float",
-              static (string value, out float result) =>
-                  float.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
+    private readonly Type _targetType = ValidateTargetType(targetType);
+    private readonly string _expectation = $"{targetType.Name} at NumberStyles.Float";
 
     /// <summary>
-    /// Parses a <see cref="double"/> value from the supplied tokens.
+    /// Parses a floating-point numeric value from the supplied tokens.
     /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, double initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "double at NumberStyles.Float",
-              static (string value, out double result) =>
-                  double.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    /// <summary>
-    /// Parses a <see cref="decimal"/> value from the supplied tokens.
-    /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The fallback value used when no token is supplied.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, decimal initialState) =>
-        Parse(options,
-              arguments,
-              initialState,
-              "decimal at NumberStyles.Float",
-              static (string value, out decimal result) =>
-                  decimal.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
-
-    private delegate bool TryParseDelegate<T>(string value, out T result);
-
-    private static ParsingResult Parse<T>(ParsingOptions options,
-                                          ImmutableArray<Token> arguments,
-                                          T initialState,
-                                          string expect,
-                                          TryParseDelegate<T> tryParse)
+    public bool TryParse(ImmutableArray<Token> input,
+                         TypeProviders typeProviders,
+                         string? format,
+                         [NotNullWhen(true)] out object? result,
+                         [NotNullWhen(false)] out string? error)
     {
-        var selectedToken = arguments.IsDefaultOrEmpty ? null : arguments[^1].Value;
-
-        if (arguments.IsDefaultOrEmpty)
+        if (input.IsDefaultOrEmpty)
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<T>(initialState),
-                                    new DebugContext(nameof(FloatParser),
-                                                     Tokens: arguments,
-                                                     TargetType: typeof(T),
-                                                     Expectation: expect));
+            result = CreateDefaultValue(_targetType);
+            error = null;
+            return true;
         }
 
-        var token = arguments[^1];
+        var token = input[^1].Value;
 
-        if (tryParse(token.Value, out var parsedValue))
+        if (TryParseCore(token, out result))
         {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<T>(parsedValue),
-                                    new DebugContext(nameof(FloatParser),
-                                                     Tokens: arguments,
-                                                     TargetType: typeof(T),
-                                                     Expectation: expect,
-                                                     SelectedToken: selectedToken));
+            error = null;
+            return true;
         }
 
-        return DebugOutput.Emit(options,
-                                new InvalidArgumentDetected(token.Value, expect, null),
-                                new DebugContext(nameof(FloatParser),
-                                                 Tokens: arguments,
-                                                 TargetType: typeof(T),
-                                                 Expectation: expect,
-                                                 SelectedToken: selectedToken));
+        result = null;
+        error = _expectation;
+        return false;
+    }
+
+    private bool TryParseCore(string value, [NotNullWhen(true)] out object? result)
+    {
+        switch (Type.GetTypeCode(_targetType))
+        {
+            case TypeCode.Single when float.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedSingle):
+                result = parsedSingle;
+                return true;
+            case TypeCode.Double when double.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedDouble):
+                result = parsedDouble;
+                return true;
+            case TypeCode.Decimal when decimal.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out var parsedDecimal):
+                result = parsedDecimal;
+                return true;
+            default:
+                result = null;
+                return false;
+        }
+    }
+
+    private static Type ValidateTargetType(Type targetType)
+    {
+        ArgumentNullException.ThrowIfNull(targetType);
+
+        return Type.GetTypeCode(targetType) switch
+        {
+            TypeCode.Single or TypeCode.Double or TypeCode.Decimal
+                => targetType,
+            _ => throw new ArgumentException($"Type '{targetType.FullName}' is not a supported floating-point type.", nameof(targetType))
+        };
+    }
+
+    private static object CreateDefaultValue(Type targetType)
+    {
+        return Type.GetTypeCode(targetType) switch
+        {
+            TypeCode.Single => default(float),
+            TypeCode.Double => default(double),
+            TypeCode.Decimal => default(decimal),
+            _ => throw new InvalidOperationException($"Unable to create a default value for '{targetType.FullName}'.")
+        };
     }
 }

@@ -12,8 +12,10 @@ namespace Kawayi.CommandLine.Core;
 /// <summary>
 /// Parses supported collection and dictionary container types from command-line tokens.
 /// </summary>
-public class ContainerParser
+public sealed class ContainerParser : IBuiltInExtendedTypeProvider
 {
+    private const char NestedErrorSeparator = '\u001F';
+
     private static readonly MethodInfo BuildSequenceContainerRuntimeMethod = typeof(ContainerParser)
         .GetMethod(nameof(BuildSequenceContainerRuntime), BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"Method '{nameof(BuildSequenceContainerRuntime)}' was not found.");
@@ -33,118 +35,125 @@ public class ContainerParser
         [new(@"\", @"\\"), new(@"=", @"\=")]);
 
     /// <summary>
-    /// Parses a supported container value from the supplied tokens.
+    /// Attempts to parse a supported container value from the supplied tokens.
     /// </summary>
-    /// <param name="options">The parsing options for this operation.</param>
-    /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The container type descriptor to populate.</param>
-    /// <param name="format">The optional format hint used for element parsing.</param>
-    /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options,
-                                              ImmutableArray<Token> arguments,
-                                              ContainerType initialState,
-                                              string? format = null)
+    public bool TryParse(ImmutableArray<Token> input,
+                         TypeProviders typeProviders,
+                         Type symbolType,
+                         string? format,
+                         [NotNullWhen(true)] out object? result,
+                         out string? error)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(initialState);
-        ArgumentNullException.ThrowIfNull(initialState.Container);
-        ArgumentNullException.ThrowIfNull(initialState.ValueType);
+        ArgumentNullException.ThrowIfNull(symbolType);
 
-        if (!initialState.Container.IsConstructedGenericType)
+        if (!ContainerType.TryCreate(symbolType, out var containerType))
         {
-            return EmitContainerDebug(options,
-                                      CreateUnsupportedContainerResult(initialState.Container),
-                                      arguments,
-                                      initialState);
+            result = null;
+            error = null;
+            return false;
         }
 
-        var genericDefinition = initialState.Container.GetGenericTypeDefinition();
-
-        var result = IsDictionaryContainer(genericDefinition)
-            ? CreateDictionaryParsing(options, arguments, initialState, genericDefinition, format)
-            : CreateSequenceParsing(options, arguments, initialState, genericDefinition, format);
-
-        return EmitContainerDebug(options, result, arguments, initialState);
+        result = CreateContainer(input, typeProviders, containerType, format, out error);
+        return error is null;
     }
 
-    private static ParsingResult CreateSequenceParsing(ParsingOptions options,
-                                                       ImmutableArray<Token> arguments,
-                                                       ContainerType containerType,
-                                                       Type genericDefinition,
-                                                       string? format)
+    private static object CreateContainer(ImmutableArray<Token> input,
+                                          TypeProviders typeProviders,
+                                          ContainerType containerType,
+                                          string? format,
+                                          out string? error)
     {
-        var parsedValues = new object?[arguments.Length];
+        ArgumentNullException.ThrowIfNull(containerType);
+        ArgumentNullException.ThrowIfNull(containerType.Container);
+        ArgumentNullException.ThrowIfNull(containerType.ValueType);
 
-        for (var index = 0; index < arguments.Length; index++)
+        if (!containerType.Container.IsConstructedGenericType)
         {
-            var result = ParseValue(options, arguments[index].Value, containerType.ValueType, format);
-
-            if (result is not ParsingFinished finished)
-            {
-                return result;
-            }
-
-            parsedValues[index] = finished.UntypedResult;
+            throw new NotSupportedException($"Container type '{containerType.Container.FullName}' must be a constructed generic type.");
         }
 
+        var genericDefinition = containerType.Container.GetGenericTypeDefinition();
+
+        return IsDictionaryContainer(genericDefinition)
+            ? CreateDictionary(containerType, genericDefinition, input, typeProviders, format, out error)
+            : CreateSequence(containerType, genericDefinition, input, typeProviders, format, out error);
+    }
+
+    private static object CreateSequence(ContainerType containerType,
+                                         Type genericDefinition,
+                                         ImmutableArray<Token> input,
+                                         TypeProviders typeProviders,
+                                         string? format,
+                                         out string? error)
+    {
+        var parsedValues = new object?[input.Length];
+
+        for (var index = 0; index < input.Length; index++)
+        {
+            if (!TryParseValue(input[index].Value, typeProviders, containerType.ValueType, format, out parsedValues[index], out error))
+            {
+                return null!;
+            }
+        }
+
+        error = null;
         return BuildSequenceContainer(genericDefinition, containerType.ValueType, parsedValues);
     }
 
-    private static ParsingResult CreateDictionaryParsing(ParsingOptions options,
-                                                         ImmutableArray<Token> arguments,
-                                                         ContainerType containerType,
-                                                         Type genericDefinition,
-                                                         string? format)
+    private static object CreateDictionary(ContainerType containerType,
+                                           Type genericDefinition,
+                                           ImmutableArray<Token> input,
+                                           TypeProviders typeProviders,
+                                           string? format,
+                                           out string? error)
     {
         if (containerType.KeyType is null)
         {
-            return new GotError(new NotSupportedException(
-                $"Dictionary container '{containerType.Container.FullName}' must provide a key type."));
+            throw new NotSupportedException($"Dictionary container '{containerType.Container.FullName}' must provide a key type.");
         }
 
-        var parsedEntries = new ParsedDictionaryEntry[arguments.Length];
+        var parsedEntries = new ParsedDictionaryEntry[input.Length];
 
-        for (var index = 0; index < arguments.Length; index++)
+        for (var index = 0; index < input.Length; index++)
         {
-            var token = arguments[index];
+            var token = input[index].Value;
 
-            if (!TrySplitDictionaryEntry(token.Value, out var rawKey, out var rawValue))
+            if (!TrySplitDictionaryEntry(token, out var rawKey, out var rawValue))
             {
-                return new InvalidArgumentDetected(token.Value, "key=value", null);
+                error = "key=value";
+                return null!;
             }
 
-            var keyResult = ParseValue(options,
-                                       DefaultDictionaryEscapeRule.Unescape(rawKey),
-                                       containerType.KeyType,
-                                       format);
-
-            if (keyResult is not ParsingFinished parsedKey)
+            if (!TryParseValue(DefaultDictionaryEscapeRule.Unescape(rawKey),
+                               typeProviders,
+                               containerType.KeyType,
+                               format,
+                               out var parsedKey,
+                               out error))
             {
-                return keyResult;
+                return null!;
             }
 
-            var valueResult = ParseValue(options,
-                                         DefaultDictionaryEscapeRule.Unescape(rawValue),
-                                         containerType.ValueType,
-                                         format);
-
-            if (valueResult is not ParsingFinished parsedValue)
+            if (!TryParseValue(DefaultDictionaryEscapeRule.Unescape(rawValue),
+                               typeProviders,
+                               containerType.ValueType,
+                               format,
+                               out var parsedValue,
+                               out error))
             {
-                return valueResult;
+                return null!;
             }
 
-            parsedEntries[index] = new(parsedKey.UntypedResult, parsedValue.UntypedResult);
+            parsedEntries[index] = new(parsedKey, parsedValue);
         }
 
-        return BuildDictionaryContainer(genericDefinition,
-                                        containerType.KeyType,
-                                        containerType.ValueType,
-                                        parsedEntries);
+        error = null;
+        return BuildDictionaryContainer(genericDefinition, containerType.KeyType, containerType.ValueType, parsedEntries);
     }
 
-    private static ParsingResult BuildSequenceContainer(Type genericDefinition,
-                                                        Type valueType,
-                                                        object?[] parsedValues)
+    private static object BuildSequenceContainer(Type genericDefinition,
+                                                 Type valueType,
+                                                 object?[] parsedValues)
     {
         if (valueType == typeof(bool))
         {
@@ -244,10 +253,10 @@ public class ContainerParser
         return BuildSequenceContainerForRuntimeType(genericDefinition, valueType, parsedValues);
     }
 
-    private static ParsingResult BuildDictionaryContainer(Type genericDefinition,
-                                                          Type keyType,
-                                                          Type valueType,
-                                                          ParsedDictionaryEntry[] entries)
+    private static object BuildDictionaryContainer(Type genericDefinition,
+                                                   Type keyType,
+                                                   Type valueType,
+                                                   ParsedDictionaryEntry[] entries)
     {
         if (keyType == typeof(bool))
         {
@@ -347,27 +356,84 @@ public class ContainerParser
         return BuildDictionaryContainerForRuntimeKeyType(genericDefinition, keyType, valueType, entries);
     }
 
-    private static ParsingResult ParseValue(ParsingOptions options,
-                                            string rawValue,
-                                            Type targetType,
-                                            string? format)
+    private static bool TryParseValue(string rawValue,
+                                      TypeProviders typeProviders,
+                                      Type targetType,
+                                      string? format,
+                                      out object? result,
+                                      out string? error)
     {
-        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
-        return TypeProviderResolver.ParseValue(options, arguments, targetType, format, nameof(ContainerParser));
+        ImmutableArray<Token> input = [new ArgumentOrCommandToken(rawValue)];
+
+        var outcome = TypeProviderResolver.TryParseCustomExact(input, targetType, format, typeProviders, out result, out error);
+        if (outcome == TypeProviderResolver.RawProviderResult.Success)
+        {
+            return true;
+        }
+
+        if (outcome == TypeProviderResolver.RawProviderResult.Invalid)
+        {
+            error = CreateNestedInvalidArgument(rawValue, error!);
+            return false;
+        }
+
+        outcome = TypeProviderResolver.TryParseCustomExtended(input, targetType, format, typeProviders, out result, out error);
+        if (outcome == TypeProviderResolver.RawProviderResult.Success)
+        {
+            return true;
+        }
+
+        if (outcome == TypeProviderResolver.RawProviderResult.Invalid)
+        {
+            error = CreateNestedInvalidArgument(rawValue, error!);
+            return false;
+        }
+
+        outcome = TypeProviderResolver.TryParseBuiltInExact(input, targetType, format, typeProviders, out result, out error);
+        if (outcome == TypeProviderResolver.RawProviderResult.Success)
+        {
+            return true;
+        }
+
+        if (outcome == TypeProviderResolver.RawProviderResult.Invalid)
+        {
+            error = CreateNestedInvalidArgument(rawValue, error!);
+            return false;
+        }
+
+        outcome = TypeProviderResolver.TryParseBuiltInExtended(input, targetType, format, typeProviders, out result, out error);
+        if (outcome == TypeProviderResolver.RawProviderResult.Success)
+        {
+            return true;
+        }
+
+        if (outcome == TypeProviderResolver.RawProviderResult.Invalid)
+        {
+            error = CreateNestedInvalidArgument(rawValue, error!);
+            return false;
+        }
+
+        throw new NotSupportedException($"Type '{targetType.FullName}' is not supported by {nameof(ContainerParser)}.");
     }
 
-    private static ParsingResult EmitContainerDebug(ParsingOptions options,
-                                                    ParsingResult result,
-                                                    ImmutableArray<Token> arguments,
-                                                    ContainerType containerType)
+    internal static bool TryDecodeNestedInvalidArgument(string error, out string argument, out string expect)
     {
-        return DebugOutput.Emit(options,
-                                result,
-                                new DebugContext(nameof(ContainerParser),
-                                                 Tokens: arguments,
-                                                 TargetType: containerType.Container,
-                                                 Expectation: containerType.Container.FullName
-                                                     ?? containerType.Container.Name));
+        var separatorIndex = error.IndexOf(NestedErrorSeparator);
+        if (separatorIndex < 0)
+        {
+            argument = string.Empty;
+            expect = string.Empty;
+            return false;
+        }
+
+        argument = error[..separatorIndex];
+        expect = error[(separatorIndex + 1)..];
+        return true;
+    }
+
+    private static string CreateNestedInvalidArgument(string argument, string expect)
+    {
+        return $"{argument}{NestedErrorSeparator}{expect}";
     }
 
     private static bool TrySplitDictionaryEntry(string rawValue, out string key, out string value)
@@ -401,56 +467,45 @@ public class ContainerParser
         return backslashCount % 2 == 1;
     }
 
-    private static ParsingResult BuildSequenceContainer<T>(Type genericDefinition, object?[] parsedValues)
+    private static object BuildSequenceContainer<T>(Type genericDefinition, object?[] parsedValues)
     {
-        try
-        {
-            var values = CastSequenceValues<T>(parsedValues);
+        var values = CastSequenceValues<T>(parsedValues);
 
-            object? result = genericDefinition == typeof(ImmutableArray<>)
-                ? ImmutableArray.CreateRange(values)
-                : genericDefinition == typeof(ImmutableList<>)
-                    ? ImmutableList.CreateRange(values)
-                    : genericDefinition == typeof(ImmutableQueue<>)
-                        ? ImmutableQueue.CreateRange(values)
-                        : genericDefinition == typeof(ImmutableStack<>)
-                            ? ImmutableStack.CreateRange(values)
-                            : genericDefinition == typeof(ImmutableSortedSet<>)
-                                ? ImmutableSortedSet.CreateRange(values)
-                                : genericDefinition == typeof(ImmutableHashSet<>)
-                                    ? ImmutableHashSet.CreateRange(values)
-                                    : null;
-
-            return result is not null
-                ? new ParsingFinished<object>(result)
-                : CreateUnsupportedContainerResult(genericDefinition);
-        }
-        catch (Exception exception)
-        {
-            return new GotError(UnwrapInvocationException(exception));
-        }
+        return genericDefinition == typeof(ImmutableArray<>)
+            ? ImmutableArray.CreateRange(values)
+            : genericDefinition == typeof(ImmutableList<>)
+                ? ImmutableList.CreateRange(values)
+                : genericDefinition == typeof(ImmutableQueue<>)
+                    ? ImmutableQueue.CreateRange(values)
+                    : genericDefinition == typeof(ImmutableStack<>)
+                        ? ImmutableStack.CreateRange(values)
+                        : genericDefinition == typeof(ImmutableSortedSet<>)
+                            ? ImmutableSortedSet.CreateRange(values)
+                            : genericDefinition == typeof(ImmutableHashSet<>)
+                                ? ImmutableHashSet.CreateRange(values)
+                                : throw CreateUnsupportedContainerException(genericDefinition);
     }
 
     [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Container construction uses runtime generic instantiation for parsed element types.")]
     [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Container construction uses runtime generic instantiation for parsed element types.")]
-    private static ParsingResult BuildSequenceContainerForRuntimeType(
+    private static object BuildSequenceContainerForRuntimeType(
         Type genericDefinition,
         Type valueType,
         object?[] parsedValues)
     {
         try
         {
-            return (ParsingResult)BuildSequenceContainerRuntimeMethod
+            return BuildSequenceContainerRuntimeMethod
                 .MakeGenericMethod(valueType)
                 .Invoke(null, [genericDefinition, parsedValues])!;
         }
         catch (Exception exception)
         {
-            return new GotError(UnwrapInvocationException(exception));
+            throw UnwrapInvocationException(exception);
         }
     }
 
-    private static ParsingResult BuildSequenceContainerRuntime<T>(Type genericDefinition, object?[] parsedValues)
+    private static object BuildSequenceContainerRuntime<T>(Type genericDefinition, object?[] parsedValues)
     {
         return BuildSequenceContainer<T>(genericDefinition, parsedValues);
     }
@@ -467,9 +522,9 @@ public class ContainerParser
         return values;
     }
 
-    private static ParsingResult BuildDictionaryContainerForKey<TKey>(Type genericDefinition,
-                                                                      Type valueType,
-                                                                      ParsedDictionaryEntry[] entries)
+    private static object BuildDictionaryContainerForKey<TKey>(Type genericDefinition,
+                                                               Type valueType,
+                                                               ParsedDictionaryEntry[] entries)
         where TKey : notnull
     {
         if (valueType == typeof(bool))
@@ -572,7 +627,7 @@ public class ContainerParser
 
     [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Dictionary construction uses runtime generic instantiation for parsed key types.")]
     [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Dictionary construction uses runtime generic instantiation for parsed key types.")]
-    private static ParsingResult BuildDictionaryContainerForRuntimeKeyType(
+    private static object BuildDictionaryContainerForRuntimeKeyType(
         Type genericDefinition,
         Type keyType,
         Type valueType,
@@ -580,19 +635,19 @@ public class ContainerParser
     {
         try
         {
-            return (ParsingResult)BuildDictionaryContainerForRuntimeKeyMethod
+            return BuildDictionaryContainerForRuntimeKeyMethod
                 .MakeGenericMethod(keyType)
                 .Invoke(null, [genericDefinition, valueType, entries])!;
         }
         catch (Exception exception)
         {
-            return new GotError(UnwrapInvocationException(exception));
+            throw UnwrapInvocationException(exception);
         }
     }
 
     [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Dictionary construction uses runtime generic instantiation for parsed value types.")]
     [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Dictionary construction uses runtime generic instantiation for parsed value types.")]
-    private static ParsingResult BuildDictionaryContainerForRuntimeValueType<TKey>(
+    private static object BuildDictionaryContainerForRuntimeValueType<TKey>(
         Type genericDefinition,
         Type valueType,
         ParsedDictionaryEntry[] entries)
@@ -600,69 +655,62 @@ public class ContainerParser
     {
         try
         {
-            return (ParsingResult)BuildDictionaryContainerForRuntimeValueMethod
+            return BuildDictionaryContainerForRuntimeValueMethod
                 .MakeGenericMethod(typeof(TKey), valueType)
                 .Invoke(null, [genericDefinition, entries])!;
         }
         catch (Exception exception)
         {
-            return new GotError(UnwrapInvocationException(exception));
+            throw UnwrapInvocationException(exception);
         }
     }
 
-    private static ParsingResult BuildDictionaryContainerForRuntimeKey<TKey>(Type genericDefinition,
-                                                                             Type valueType,
-                                                                             ParsedDictionaryEntry[] entries)
+    private static object BuildDictionaryContainerForRuntimeKey<TKey>(Type genericDefinition,
+                                                                      Type valueType,
+                                                                      ParsedDictionaryEntry[] entries)
         where TKey : notnull
     {
         return BuildDictionaryContainerForKey<TKey>(genericDefinition, valueType, entries);
     }
 
-    private static ParsingResult BuildDictionaryContainerForRuntimeValue<TKey, TValue>(Type genericDefinition,
-                                                                                       ParsedDictionaryEntry[] entries)
+    private static object BuildDictionaryContainerForRuntimeValue<TKey, TValue>(Type genericDefinition,
+                                                                                ParsedDictionaryEntry[] entries)
         where TKey : notnull
     {
         return BuildDictionaryContainer<TKey, TValue>(genericDefinition, entries);
     }
 
-    private static ParsingResult BuildDictionaryContainer<TKey, TValue>(Type genericDefinition,
-                                                                        ParsedDictionaryEntry[] entries)
+    private static object BuildDictionaryContainer<TKey, TValue>(Type genericDefinition,
+                                                                 ParsedDictionaryEntry[] entries)
         where TKey : notnull
     {
-        try
+        var values = CastDictionaryEntries<TKey, TValue>(entries);
+
+        if (genericDefinition == typeof(ImmutableDictionary<,>))
         {
-            var values = CastDictionaryEntries<TKey, TValue>(entries);
+            var dictionary = ImmutableDictionary<TKey, TValue>.Empty;
 
-            if (genericDefinition == typeof(ImmutableDictionary<,>))
+            foreach (var (key, value) in values)
             {
-                var dictionary = ImmutableDictionary<TKey, TValue>.Empty;
-
-                foreach (var (key, value) in values)
-                {
-                    dictionary = dictionary.SetItem(key, value);
-                }
-
-                return new ParsingFinished<object>(dictionary);
+                dictionary = dictionary.SetItem(key, value);
             }
 
-            if (genericDefinition == typeof(ImmutableSortedDictionary<,>))
+            return dictionary;
+        }
+
+        if (genericDefinition == typeof(ImmutableSortedDictionary<,>))
+        {
+            var dictionary = ImmutableSortedDictionary<TKey, TValue>.Empty;
+
+            foreach (var (key, value) in values)
             {
-                var dictionary = ImmutableSortedDictionary<TKey, TValue>.Empty;
-
-                foreach (var (key, value) in values)
-                {
-                    dictionary = dictionary.SetItem(key, value);
-                }
-
-                return new ParsingFinished<object>(dictionary);
+                dictionary = dictionary.SetItem(key, value);
             }
 
-            return CreateUnsupportedContainerResult(genericDefinition);
+            return dictionary;
         }
-        catch (Exception exception)
-        {
-            return new GotError(UnwrapInvocationException(exception));
-        }
+
+        throw CreateUnsupportedContainerException(genericDefinition);
     }
 
     private static KeyValuePair<TKey, TValue>[] CastDictionaryEntries<TKey, TValue>(ParsedDictionaryEntry[] entries)
@@ -678,10 +726,9 @@ public class ContainerParser
         return values;
     }
 
-    private static ParsingResult CreateUnsupportedContainerResult(Type containerType)
+    private static NotSupportedException CreateUnsupportedContainerException(Type containerType)
     {
-        return new GotError(new NotSupportedException(
-            $"Container '{containerType.FullName}' is not supported by {nameof(ContainerParser)}."));
+        return new NotSupportedException($"Container '{containerType.FullName}' is not supported by {nameof(ContainerParser)}.");
     }
 
     private static bool IsDictionaryContainer(Type genericDefinition)

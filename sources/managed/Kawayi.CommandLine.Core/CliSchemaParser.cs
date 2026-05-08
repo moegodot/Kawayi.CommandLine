@@ -484,7 +484,13 @@ public sealed class CliSchemaParser
 
     private static ParsingResult ParseTypedValue(ParsingOptions options, ImmutableArray<Token> tokens, Type targetType, string? format)
     {
-        return TypeProviderResolver.ParseValue(options, tokens, targetType, format, nameof(CliSchemaParser));
+        var visibleProviders = TypeProviderResolver.CreateVisibleProviders(options.TypeProviders);
+
+        return TypeProviderResolver.ParseCustomExact(options, tokens, targetType, format, visibleProviders)
+            ?? TypeProviderResolver.ParseCustomExtended(options, tokens, targetType, format, visibleProviders)
+            ?? TypeProviderResolver.ParseBuiltInExact(options, tokens, targetType, format, visibleProviders)
+            ?? TypeProviderResolver.ParseBuiltInExtended(options, tokens, targetType, format, visibleProviders)
+            ?? TypeProviderResolver.CreateUnsupportedTypeResult(targetType, nameof(CliSchemaParser));
     }
 
     private static bool TryCreateFlagResult(ParsingOptions options,

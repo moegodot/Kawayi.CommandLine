@@ -12,6 +12,7 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --trace-id-prefix demo --color-output true
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --start-date 20260508 --start-time 091011
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --supported-version 1.0 --supported-version 2.1
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload hidden-profile extra-a extra-b --format xml --verbose true --retries 4 --tag alpha --tag beta --env region=cn --env tier=prod serve localhost --daemon false watch --interval 5 --once true --sink stdout changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch --interval 5 -k-L/bin/foo.a
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- '\-serve' --format json
@@ -31,6 +32,7 @@
 
 using System.Collections;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
 using Kawayi.CommandLine.Core.Attributes;
@@ -104,7 +106,9 @@ internal static class Program
             ParsingOptions.DefaultEnableStyle,
             ParsingOptions.DefaultDebug,
             styleTable,
-            TypeProviders.Empty);
+            new TypeProviders(
+                ImmutableDictionary<Type, ITypeProvider>.Empty.Add(typeof(Version), new VersionExactTypeProvider()),
+                ImmutableArray<IExtendedTypeProvider>.Empty));
     }
 
     private static void PrintOverview<T>(TextWriter output, ParsingOptions options)
@@ -117,6 +121,7 @@ internal static class Program
         output.WriteLine($"Documents: {T.Documents.Count}");
         output.WriteLine($"Symbols: {T.Symbols.Length}");
         output.WriteLine($"Root surface: {schema.Argument.Count} arguments, {schema.Properties.Values.Distinct().Count()} options, {schema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
+        output.WriteLine($"Custom type providers: {options.TypeProviders.Providers.Count} exact, {options.TypeProviders.ExtendedProviders.Length} extended");
         output.WriteLine($"Warm-up via CliSchema.Parse(...): {warmupResult.GetType().Name}");
         output.WriteLine();
     }
@@ -193,6 +198,7 @@ internal static class Program
         output.WriteLine($"  Endpoint: {DescribeValue(command.Endpoint)}");
         output.WriteLine($"  StartDate: {DescribeValue(command.StartDate)}");
         output.WriteLine($"  StartTime: {DescribeValue(command.StartTime)}");
+        output.WriteLine($"  SupportedVersions: {DescribeValue(command.SupportedVersions)}");
         output.WriteLine($"  Tags: {DescribeValue(command.Tags)}");
         output.WriteLine($"  Env: {DescribeValue(command.Env)}");
         output.WriteLine($"  SecretToken: {(command.SecretToken is null ? "null" : "(set)")}");
@@ -304,6 +310,34 @@ internal static class Program
         }
 
         return DescribeValue(item);
+    }
+}
+
+internal sealed class VersionExactTypeProvider : ITypeProvider
+{
+    public bool TryParse(ImmutableArray<Token> input,
+                         TypeProviders typeProviders,
+                         string? format,
+                         [NotNullWhen(true)] out object? result,
+                         [NotNullWhen(false)] out string? error)
+    {
+        if (input.IsDefaultOrEmpty)
+        {
+            result = new Version(0, 0);
+            error = null;
+            return true;
+        }
+
+        if (Version.TryParse(input[^1].Value, out var version) && version is not null)
+        {
+            result = version;
+            error = null;
+            return true;
+        }
+
+        result = null;
+        error = "Version";
+        return false;
     }
 }
 
@@ -451,6 +485,16 @@ public partial class WorkspaceCommand
     [Property(format: "HHmmss")]
     [LongAlias("start-time")]
     public TimeOnly StartTime { get; set; }
+
+    /// <summary>
+    /// Supported versions
+    /// </summary>
+    /// <remarks>
+    /// Demonstrates a custom exact type provider reused by the built-in container provider.
+    /// </remarks>
+    [Property]
+    [LongAlias("supported-version")]
+    public ImmutableArray<Version> SupportedVersions { get; set; }
 
     /// <summary>
     /// Repeated tags

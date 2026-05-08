@@ -4,7 +4,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
-using Kawayi.CommandLine.Core.Primitives;
 
 namespace Kawayi.CommandLine.Core.Tests;
 
@@ -14,11 +13,9 @@ public sealed class PrimitiveParserTests
         new ProgramInformation("test", new("test", "test"), new Version(1, 0), "https://example.com"));
 
     [Test]
-    public async Task NumberParser_Returns_Initial_State_When_No_Arguments_Are_Provided()
+    public async Task NumberParser_Returns_Default_Value_When_No_Arguments_Are_Provided()
     {
-        var result = NumberParser.CreateParsing(DefaultOptions, [], 42);
-
-        await AssertParsingFinished(result, 42);
+        await AssertParsingFinished(ParseExact(typeof(int), []), 0);
     }
 
     [Test]
@@ -30,9 +27,7 @@ public sealed class PrimitiveParserTests
             new ArgumentOrCommandToken("2")
         ];
 
-        var result = NumberParser.CreateParsing(DefaultOptions, arguments, 0);
-
-        await AssertParsingFinished(result, 2);
+        await AssertParsingFinished(ParseExact(typeof(int), arguments), 2);
     }
 
     [Test]
@@ -49,34 +44,22 @@ public sealed class PrimitiveParserTests
         switch (rawValue)
         {
             case "127":
-                await AssertParsingFinished(
-                    NumberParser.CreateParsing(DefaultOptions, arguments, (sbyte)0),
-                    (sbyte)127);
+                await AssertParsingFinished(ParseExact(typeof(sbyte), arguments), (sbyte)127);
                 return;
             case "-32768":
-                await AssertParsingFinished(
-                    NumberParser.CreateParsing(DefaultOptions, arguments, (short)0),
-                    (short)-32768);
+                await AssertParsingFinished(ParseExact(typeof(short), arguments), (short)-32768);
                 return;
             case "65535":
-                await AssertParsingFinished(
-                    NumberParser.CreateParsing(DefaultOptions, arguments, (ushort)0),
-                    ushort.MaxValue);
+                await AssertParsingFinished(ParseExact(typeof(ushort), arguments), ushort.MaxValue);
                 return;
             case "4294967295":
-                await AssertParsingFinished(
-                    NumberParser.CreateParsing(DefaultOptions, arguments, 0u),
-                    uint.MaxValue);
+                await AssertParsingFinished(ParseExact(typeof(uint), arguments), uint.MaxValue);
                 return;
             case "9223372036854775807":
-                await AssertParsingFinished(
-                    NumberParser.CreateParsing(DefaultOptions, arguments, 0L),
-                    long.MaxValue);
+                await AssertParsingFinished(ParseExact(typeof(long), arguments), long.MaxValue);
                 return;
             case "18446744073709551615":
-                await AssertParsingFinished(
-                    NumberParser.CreateParsing(DefaultOptions, arguments, 0UL),
-                    ulong.MaxValue);
+                await AssertParsingFinished(ParseExact(typeof(ulong), arguments), ulong.MaxValue);
                 return;
             default:
                 throw new InvalidOperationException($"Unsupported raw value '{rawValue}'.");
@@ -88,9 +71,7 @@ public sealed class PrimitiveParserTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("12.5")];
 
-        var result = NumberParser.CreateParsing(DefaultOptions, arguments, 0);
-
-        await AssertInvalidArgument(result, "12.5", "int at NumberStyles.Integer");
+        await AssertInvalidArgument(ParseExact(typeof(int), arguments), "12.5", "Int32 at NumberStyles.Integer");
     }
 
     [Test]
@@ -103,25 +84,23 @@ public sealed class PrimitiveParserTests
 
         ParsingResult result = expected switch
         {
-            float value => FloatParser.CreateParsing(DefaultOptions, arguments, value + 1),
-            double value => FloatParser.CreateParsing(DefaultOptions, arguments, value + 1),
-            string value => FloatParser.CreateParsing(DefaultOptions, arguments, decimal.Zero),
+            float => ParseExact(typeof(float), arguments),
+            double => ParseExact(typeof(double), arguments),
+            string => ParseExact(typeof(decimal), arguments),
             _ => throw new InvalidOperationException($"Unsupported expected type: {expected.GetType().FullName}")
         };
 
         var normalizedExpected = expected is string decimalRaw
-            ? decimal.Parse(decimalRaw)
+            ? decimal.Parse(decimalRaw, CultureInfo.InvariantCulture)
             : expected;
 
         await AssertParsingFinished(result, normalizedExpected);
     }
 
     [Test]
-    public async Task FloatParser_Returns_Initial_State_When_No_Arguments_Are_Provided()
+    public async Task FloatParser_Returns_Default_Value_When_No_Arguments_Are_Provided()
     {
-        var result = FloatParser.CreateParsing(DefaultOptions, [], 4.25m);
-
-        await AssertParsingFinished(result, 4.25m);
+        await AssertParsingFinished(ParseExact(typeof(decimal), []), 0m);
     }
 
     [Test]
@@ -129,9 +108,7 @@ public sealed class PrimitiveParserTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("not-a-number")];
 
-        var result = FloatParser.CreateParsing(DefaultOptions, arguments, decimal.Zero);
-
-        await AssertInvalidArgument(result, "not-a-number", "decimal at NumberStyles.Float");
+        await AssertInvalidArgument(ParseExact(typeof(decimal), arguments), "not-a-number", "Decimal at NumberStyles.Float");
     }
 
     [Test]
@@ -145,15 +122,9 @@ public sealed class PrimitiveParserTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
 
-            await AssertParsingFinished(
-                FloatParser.CreateParsing(DefaultOptions, [new ArgumentOrCommandToken("3.5")], decimal.Zero),
-                3.5m);
-            await AssertParsingFinished(
-                CommonParser.CreateParsing(DefaultOptions, [new ArgumentOrCommandToken("2026-05-08")], default(DateOnly)),
-                new DateOnly(2026, 5, 8));
-            await AssertParsingFinished(
-                CommonParser.CreateParsing(DefaultOptions, [new ArgumentOrCommandToken("12:34:56")], default(TimeOnly)),
-                new TimeOnly(12, 34, 56));
+            await AssertParsingFinished(ParseExact(typeof(decimal), [new ArgumentOrCommandToken("3.5")]), 3.5m);
+            await AssertParsingFinished(ParseExact(typeof(DateOnly), [new ArgumentOrCommandToken("2026-05-08")]), new DateOnly(2026, 5, 8));
+            await AssertParsingFinished(ParseExact(typeof(TimeOnly), [new ArgumentOrCommandToken("12:34:56")]), new TimeOnly(12, 34, 56));
         }
         finally
         {
@@ -169,9 +140,7 @@ public sealed class PrimitiveParserTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
 
-        var result = BooleanParser.CreateParsing(DefaultOptions, arguments, !expected);
-
-        await AssertParsingFinished(result, expected);
+        await AssertParsingFinished(ParseExact(typeof(bool), arguments), expected);
     }
 
     [Test]
@@ -181,9 +150,7 @@ public sealed class PrimitiveParserTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
 
-        var result = BooleanParser.CreateParsing(DefaultOptions, arguments, false);
-
-        await AssertInvalidArgument(result, rawValue, "bool");
+        await AssertInvalidArgument(ParseExact(typeof(bool), arguments), rawValue, "bool");
     }
 
     [Test]
@@ -192,9 +159,7 @@ public sealed class PrimitiveParserTests
         var expected = Guid.Parse("2b5c66c5-f2a0-4720-a8f3-80abf153e8d3");
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(expected.ToString())];
 
-        var result = CommonParser.CreateParsing(DefaultOptions, arguments, Guid.Empty);
-
-        await AssertParsingFinished(result, expected);
+        await AssertParsingFinished(ParseExact(typeof(Guid), arguments), expected);
     }
 
     [Test]
@@ -203,60 +168,26 @@ public sealed class PrimitiveParserTests
         ImmutableArray<Token> absoluteArguments = [new ArgumentOrCommandToken("https://example.com/path?q=1")];
         ImmutableArray<Token> relativeArguments = [new ArgumentOrCommandToken("docs/guide")];
 
-        var absoluteResult = CommonParser.CreateParsing(DefaultOptions, absoluteArguments, new Uri("https://fallback.example"));
-        var relativeResult = CommonParser.CreateParsing(DefaultOptions, relativeArguments, new Uri("https://fallback.example"));
-
-        await AssertParsingFinished(absoluteResult, new Uri("https://example.com/path?q=1"));
-        await AssertParsingFinished(relativeResult, new Uri("docs/guide", UriKind.Relative));
+        await AssertParsingFinished(ParseExact(typeof(Uri), absoluteArguments), new Uri("https://example.com/path?q=1"));
+        await AssertParsingFinished(ParseExact(typeof(Uri), relativeArguments), new Uri("docs/guide", UriKind.Relative));
     }
 
     [Test]
     public async Task CommonParser_Parses_Date_And_Time_Types()
     {
-        ImmutableArray<Token> dateTimeArguments = [new ArgumentOrCommandToken("2026-04-27T12:34:56")];
-        ImmutableArray<Token> dateTimeOffsetArguments = [new ArgumentOrCommandToken("2026-04-27T12:34:56+08:00")];
-        ImmutableArray<Token> dateOnlyArguments = [new ArgumentOrCommandToken("2026-04-27")];
-        ImmutableArray<Token> timeOnlyArguments = [new ArgumentOrCommandToken("12:34:56")];
-
-        var dateTimeResult = CommonParser.CreateParsing(DefaultOptions, dateTimeArguments, default(DateTime));
-        var dateTimeOffsetResult = CommonParser.CreateParsing(DefaultOptions, dateTimeOffsetArguments, default(DateTimeOffset));
-        var dateOnlyResult = CommonParser.CreateParsing(DefaultOptions, dateOnlyArguments, default(DateOnly));
-        var timeOnlyResult = CommonParser.CreateParsing(DefaultOptions, timeOnlyArguments, default(TimeOnly));
-
-        await AssertParsingFinished(dateTimeResult, DateTime.Parse("2026-04-27T12:34:56"));
-        await AssertParsingFinished(dateTimeOffsetResult, DateTimeOffset.Parse("2026-04-27T12:34:56+08:00"));
-        await AssertParsingFinished(dateOnlyResult, DateOnly.Parse("2026-04-27"));
-        await AssertParsingFinished(timeOnlyResult, TimeOnly.Parse("12:34:56"));
+        await AssertParsingFinished(ParseExact(typeof(DateTime), [new ArgumentOrCommandToken("2026-04-27T12:34:56")]), DateTime.Parse("2026-04-27T12:34:56", CultureInfo.InvariantCulture));
+        await AssertParsingFinished(ParseExact(typeof(DateTimeOffset), [new ArgumentOrCommandToken("2026-04-27T12:34:56+08:00")]), DateTimeOffset.Parse("2026-04-27T12:34:56+08:00", CultureInfo.InvariantCulture));
+        await AssertParsingFinished(ParseExact(typeof(DateOnly), [new ArgumentOrCommandToken("2026-04-27")]), DateOnly.Parse("2026-04-27", CultureInfo.InvariantCulture));
+        await AssertParsingFinished(ParseExact(typeof(TimeOnly), [new ArgumentOrCommandToken("12:34:56")]), TimeOnly.Parse("12:34:56", CultureInfo.InvariantCulture));
     }
 
     [Test]
     public async Task CommonParser_Parses_Date_And_Time_Types_With_Exact_Formats()
     {
-        var dateTimeResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("20260508-091011")],
-            default(DateTime),
-            "yyyyMMdd-HHmmss");
-        var dateTimeOffsetResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("20260508-091011+00:00")],
-            default(DateTimeOffset),
-            "yyyyMMdd-HHmmsszzz");
-        var dateOnlyResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("20260508")],
-            default(DateOnly),
-            "yyyyMMdd");
-        var timeOnlyResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("091011")],
-            default(TimeOnly),
-            "HHmmss");
-
-        await AssertParsingFinished(dateTimeResult, new DateTime(2026, 5, 8, 9, 10, 11));
-        await AssertParsingFinished(dateTimeOffsetResult, new DateTimeOffset(2026, 5, 8, 9, 10, 11, TimeSpan.Zero));
-        await AssertParsingFinished(dateOnlyResult, new DateOnly(2026, 5, 8));
-        await AssertParsingFinished(timeOnlyResult, new TimeOnly(9, 10, 11));
+        await AssertParsingFinished(ParseExact(typeof(DateTime), [new ArgumentOrCommandToken("20260508-091011")], "yyyyMMdd-HHmmss"), new DateTime(2026, 5, 8, 9, 10, 11));
+        await AssertParsingFinished(ParseExact(typeof(DateTimeOffset), [new ArgumentOrCommandToken("20260508-091011+00:00")], "yyyyMMdd-HHmmsszzz"), new DateTimeOffset(2026, 5, 8, 9, 10, 11, TimeSpan.Zero));
+        await AssertParsingFinished(ParseExact(typeof(DateOnly), [new ArgumentOrCommandToken("20260508")], "yyyyMMdd"), new DateOnly(2026, 5, 8));
+        await AssertParsingFinished(ParseExact(typeof(TimeOnly), [new ArgumentOrCommandToken("091011")], "HHmmss"), new TimeOnly(9, 10, 11));
     }
 
     [Test]
@@ -270,106 +201,87 @@ public sealed class PrimitiveParserTests
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
 
-        ParsingResult result = expectedDescription switch
+        var targetType = expectedDescription switch
         {
-            "Guid" => CommonParser.CreateParsing(DefaultOptions, arguments, Guid.Empty),
-            "Uri at UriKind.RelativeOrAbsolute" => CommonParser.CreateParsing(DefaultOptions, arguments, new Uri("https://fallback.example")),
-            "DateTime at DateTimeStyles.None" => CommonParser.CreateParsing(DefaultOptions, arguments, default(DateTime)),
-            "DateTimeOffset at DateTimeStyles.None" => CommonParser.CreateParsing(DefaultOptions, arguments, default(DateTimeOffset)),
-            "DateOnly at DateTimeStyles.None" => CommonParser.CreateParsing(DefaultOptions, arguments, default(DateOnly)),
-            "TimeOnly at DateTimeStyles.None" => CommonParser.CreateParsing(DefaultOptions, arguments, default(TimeOnly)),
+            "Guid" => typeof(Guid),
+            "Uri at UriKind.RelativeOrAbsolute" => typeof(Uri),
+            "DateTime at DateTimeStyles.None" => typeof(DateTime),
+            "DateTimeOffset at DateTimeStyles.None" => typeof(DateTimeOffset),
+            "DateOnly at DateTimeStyles.None" => typeof(DateOnly),
+            "TimeOnly at DateTimeStyles.None" => typeof(TimeOnly),
             _ => throw new InvalidOperationException($"Unsupported expected description: {expectedDescription}")
         };
 
-        await AssertInvalidArgument(result, rawValue, expectedDescription);
+        await AssertInvalidArgument(ParseExact(targetType, arguments), rawValue, expectedDescription);
     }
 
     [Test]
     public async Task CommonParser_Returns_InvalidArgument_For_Mismatched_Exact_Formats()
     {
-        var dateTimeResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("2026-05-08T09:10:11")],
-            default(DateTime),
-            "yyyyMMdd-HHmmss");
-        var dateTimeOffsetResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("2026-05-08T09:10:11+00:00")],
-            default(DateTimeOffset),
-            "yyyyMMdd-HHmmsszzz");
-        var dateOnlyResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("2026-05-08")],
-            default(DateOnly),
-            "yyyyMMdd");
-        var timeOnlyResult = CommonParser.CreateParsing(
-            DefaultOptions,
-            [new ArgumentOrCommandToken("09:10:11")],
-            default(TimeOnly),
-            "HHmmss");
-
-        await AssertInvalidArgument(dateTimeResult, "2026-05-08T09:10:11", "DateTime at exact format 'yyyyMMdd-HHmmss'");
-        await AssertInvalidArgument(dateTimeOffsetResult, "2026-05-08T09:10:11+00:00", "DateTimeOffset at exact format 'yyyyMMdd-HHmmsszzz'");
-        await AssertInvalidArgument(dateOnlyResult, "2026-05-08", "DateOnly at exact format 'yyyyMMdd'");
-        await AssertInvalidArgument(timeOnlyResult, "09:10:11", "TimeOnly at exact format 'HHmmss'");
+        await AssertInvalidArgument(ParseExact(typeof(DateTime), [new ArgumentOrCommandToken("2026-05-08T09:10:11")], "yyyyMMdd-HHmmss"), "2026-05-08T09:10:11", "DateTime at exact format 'yyyyMMdd-HHmmss'");
+        await AssertInvalidArgument(ParseExact(typeof(DateTimeOffset), [new ArgumentOrCommandToken("2026-05-08T09:10:11+00:00")], "yyyyMMdd-HHmmsszzz"), "2026-05-08T09:10:11+00:00", "DateTimeOffset at exact format 'yyyyMMdd-HHmmsszzz'");
+        await AssertInvalidArgument(ParseExact(typeof(DateOnly), [new ArgumentOrCommandToken("2026-05-08")], "yyyyMMdd"), "2026-05-08", "DateOnly at exact format 'yyyyMMdd'");
+        await AssertInvalidArgument(ParseExact(typeof(TimeOnly), [new ArgumentOrCommandToken("09:10:11")], "HHmmss"), "09:10:11", "TimeOnly at exact format 'HHmmss'");
     }
 
     [Test]
-    public async Task CommonParser_Returns_Initial_State_When_No_Arguments_Are_Provided()
+    public async Task CommonParser_Returns_Default_Value_When_No_Arguments_Are_Provided()
     {
-        var initialState = new Uri("https://initial.example/path");
-
-        var result = CommonParser.CreateParsing(DefaultOptions, [], initialState);
-
-        await AssertParsingFinished(result, initialState);
+        await AssertParsingFinished(ParseExact(typeof(string), []), string.Empty);
+        await AssertParsingFinished(ParseExact(typeof(Guid), []), Guid.Empty);
+        await AssertParsingFinished(ParseExact(typeof(DateTime), []), default(DateTime));
     }
 
     [Test]
     public async Task EnumParser_Parses_Named_Value_Case_Insensitively()
     {
-        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("advanced")];
-
-        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SampleMode), SampleMode.Basic);
-
-        await AssertParsingFinished(result, SampleMode.Advanced);
+        await AssertParsingFinished(ParseExtended(typeof(SampleMode), [new ArgumentOrCommandToken("advanced")]), SampleMode.Advanced);
     }
 
     [Test]
     public async Task EnumParser_Parses_Numeric_Underlying_Value()
     {
-        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("2")];
-
-        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SampleMode), SampleMode.Basic);
-
-        await AssertParsingFinished(result, SampleMode.Advanced);
+        await AssertParsingFinished(ParseExtended(typeof(SampleMode), [new ArgumentOrCommandToken("2")]), SampleMode.Advanced);
     }
 
     [Test]
     public async Task EnumParser_Parses_Flags_Combinations()
     {
-        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("Read, Write")];
-
-        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SamplePermissions), SamplePermissions.None);
-
-        await AssertParsingFinished(result, SamplePermissions.Read | SamplePermissions.Write);
+        await AssertParsingFinished(ParseExtended(typeof(SamplePermissions), [new ArgumentOrCommandToken("Read, Write")]), SamplePermissions.Read | SamplePermissions.Write);
     }
 
     [Test]
-    public async Task EnumParser_Returns_Initial_State_When_No_Arguments_Are_Provided()
+    public async Task EnumParser_Returns_Default_Zero_Value_When_No_Arguments_Are_Provided()
     {
-        var result = EnumParser.CreateParsing(DefaultOptions, [], typeof(SampleMode), SampleMode.Advanced);
-
-        await AssertParsingFinished(result, SampleMode.Advanced);
+        await AssertParsingFinished(ParseExtended(typeof(SampleMode), []), (SampleMode)0);
     }
 
     [Test]
     public async Task EnumParser_Returns_InvalidArgument_For_Invalid_Enum_Input()
     {
-        ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways")];
+        await AssertInvalidArgument(ParseExtended(typeof(SampleMode), [new ArgumentOrCommandToken("sideways")]), "sideways", "SampleMode enum");
+    }
 
-        var result = EnumParser.CreateParsing(DefaultOptions, arguments, typeof(SampleMode), SampleMode.Basic);
+    private static ParsingResult ParseExact(Type targetType, ImmutableArray<Token> arguments, string? format = null)
+    {
+        return TypeProviderResolver.ParseBuiltInExact(
+                   DefaultOptions,
+                   arguments,
+                   targetType,
+                   format,
+                   TypeProviderResolver.BuiltinTypeProviders)
+               ?? throw new InvalidOperationException($"No built-in exact provider handled '{targetType.FullName}'.");
+    }
 
-        await AssertInvalidArgument(result, "sideways", "SampleMode enum");
+    private static ParsingResult ParseExtended(Type targetType, ImmutableArray<Token> arguments, string? format = null)
+    {
+        return TypeProviderResolver.ParseBuiltInExtended(
+                   DefaultOptions,
+                   arguments,
+                   targetType,
+                   format,
+                   TypeProviderResolver.BuiltinTypeProviders)
+               ?? throw new InvalidOperationException($"No built-in extended provider handled '{targetType.FullName}'.");
     }
 
     private static async Task AssertParsingFinished<T>(ParsingResult result, T expected)

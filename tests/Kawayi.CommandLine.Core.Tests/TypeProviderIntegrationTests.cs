@@ -64,14 +64,14 @@ public sealed class TypeProviderIntegrationTests
     [Test]
     public async Task ContainerParser_Uses_Exact_Providers_For_Element_Types()
     {
-        var options = CreateOptions(new TypeProviders(
+        TypeProviders customProviders = new(
             ImmutableDictionary<Type, ITypeProvider>.Empty.Add(typeof(Version), new VersionExactTypeProvider()),
-            ImmutableArray<IExtendedTypeProvider>.Empty));
+            ImmutableArray<IExtendedTypeProvider>.Empty);
 
-        var result = ContainerParser.CreateParsing(
-            options,
+        var result = ParseContainer(
             [new ArgumentOrCommandToken("1.0"), new ArgumentOrCommandToken("2.1")],
-            new ContainerType(typeof(ImmutableArray<Version>), null, typeof(Version)));
+            typeof(ImmutableArray<Version>),
+            customProviders);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableArray<Version> versions })
         {
@@ -84,14 +84,14 @@ public sealed class TypeProviderIntegrationTests
     [Test]
     public async Task ContainerParser_Continues_To_Later_Extended_Providers_When_Earlier_Providers_Do_Not_Handle_Type()
     {
-        var options = CreateOptions(new TypeProviders(
+        TypeProviders customProviders = new(
             ImmutableDictionary<Type, ITypeProvider>.Empty,
-            [new SkipStringOnlyExtendedTypeProvider(), new VersionExtendedTypeProvider()]));
+            [new SkipStringOnlyExtendedTypeProvider(), new VersionExtendedTypeProvider()]);
 
-        var result = ContainerParser.CreateParsing(
-            options,
+        var result = ParseContainer(
             [new ArgumentOrCommandToken("1.0"), new ArgumentOrCommandToken("2.1")],
-            new ContainerType(typeof(ImmutableArray<Version>), null, typeof(Version)));
+            typeof(ImmutableArray<Version>),
+            customProviders);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableArray<Version> versions })
         {
@@ -102,16 +102,36 @@ public sealed class TypeProviderIntegrationTests
     }
 
     [Test]
+    public async Task ContainerParser_Uses_User_Extended_Providers_Before_BuiltIn_Exact_Providers()
+    {
+        TypeProviders customProviders = new(
+            ImmutableDictionary<Type, ITypeProvider>.Empty,
+            [new IntWordsExtendedTypeProvider()]);
+
+        var result = ParseContainer(
+            [new ArgumentOrCommandToken("forty-two")],
+            typeof(ImmutableArray<int>),
+            customProviders);
+
+        if (result is not ParsingFinished { UntypedResult: ImmutableArray<int> values })
+        {
+            throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(values).IsEquivalentTo([42]);
+    }
+
+    [Test]
     public async Task ContainerParser_Returns_InvalidArgument_When_Extended_Provider_Rejects_A_Handled_Type()
     {
-        var options = CreateOptions(new TypeProviders(
+        TypeProviders customProviders = new(
             ImmutableDictionary<Type, ITypeProvider>.Empty,
-            [new SkipStringOnlyExtendedTypeProvider(), new VersionExtendedTypeProvider()]));
+            [new SkipStringOnlyExtendedTypeProvider(), new VersionExtendedTypeProvider()]);
 
-        var result = ContainerParser.CreateParsing(
-            options,
+        var result = ParseContainer(
             [new ArgumentOrCommandToken("not-a-version")],
-            new ContainerType(typeof(ImmutableArray<Version>), null, typeof(Version)));
+            typeof(ImmutableArray<Version>),
+            customProviders);
 
         if (result is not InvalidArgumentDetected invalid)
         {
@@ -183,6 +203,14 @@ public sealed class TypeProviderIntegrationTests
         return result is ParsingFinished { UntypedResult: Cli command }
             ? command
             : throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
+    }
+
+    private static ParsingResult ParseContainer(ImmutableArray<Token> arguments, Type targetType, TypeProviders customProviders)
+    {
+        var options = CreateOptions(customProviders);
+        var visibleProviders = TypeProviderResolver.CreateVisibleProviders(customProviders);
+        return TypeProviderResolver.ParseBuiltInExtended(options, arguments, targetType, null, visibleProviders)
+               ?? throw new InvalidOperationException($"No built-in container provider handled '{targetType.FullName}'.");
     }
 
     private sealed class HexIntTypeProvider : ITypeProvider

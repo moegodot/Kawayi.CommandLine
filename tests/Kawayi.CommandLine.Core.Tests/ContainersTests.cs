@@ -12,23 +12,17 @@ public sealed class ContainersTests
         new ProgramInformation("test", new("test", "test"), new Version(1, 0), "https://example.com"));
 
     [Test]
-    public async Task CreateParsing_Returns_Empty_Containers_When_No_Arguments_Are_Provided()
+    public async Task ParseBuiltInExtended_Returns_Empty_Containers_When_No_Arguments_Are_Provided()
     {
-        var arrayResult = ContainerParser.CreateParsing(
-            DefaultOptions,
-            [],
-            new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
-        var dictionaryResult = ContainerParser.CreateParsing(
-            DefaultOptions,
-            [],
-            new ContainerType(typeof(ImmutableDictionary<string, int>), typeof(string), typeof(int)));
+        var arrayResult = ParseContainer(typeof(ImmutableArray<int>), []);
+        var dictionaryResult = ParseContainer(typeof(ImmutableDictionary<string, int>), []);
 
         await AssertImmutableArray(arrayResult, []);
         await AssertImmutableDictionary(dictionaryResult, []);
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableArray_Of_Int()
+    public async Task ParseBuiltInExtended_Parses_ImmutableArray_Of_Int()
     {
         ImmutableArray<Token> arguments =
         [
@@ -37,16 +31,11 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("3")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
-
-        await AssertImmutableArray(result, [1, 2, 3]);
+        await AssertImmutableArray(ParseContainer(typeof(ImmutableArray<int>), arguments), [1, 2, 3]);
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableList_Of_Bool()
+    public async Task ParseBuiltInExtended_Parses_ImmutableList_Of_Bool()
     {
         ImmutableArray<Token> arguments =
         [
@@ -54,10 +43,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("FALSE")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableList<bool>), null, typeof(bool)));
+        var result = ParseContainer(typeof(ImmutableList<bool>), arguments);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableList<bool> list })
         {
@@ -70,7 +56,7 @@ public sealed class ContainersTests
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableHashSet_Of_Guid()
+    public async Task ParseBuiltInExtended_Parses_ImmutableHashSet_Of_Guid()
     {
         var first = Guid.Parse("2b5c66c5-f2a0-4720-a8f3-80abf153e8d3");
         var second = Guid.Parse("f4602e26-b7b4-4735-b931-d58d8f6f74c2");
@@ -80,10 +66,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken(second.ToString())
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableHashSet<Guid>), null, typeof(Guid)));
+        var result = ParseContainer(typeof(ImmutableHashSet<Guid>), arguments);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableHashSet<Guid> set })
         {
@@ -96,7 +79,7 @@ public sealed class ContainersTests
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableArray_Of_Enum()
+    public async Task ParseBuiltInExtended_Parses_ImmutableArray_Of_Enum()
     {
         ImmutableArray<Token> arguments =
         [
@@ -104,10 +87,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("2")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableArray<SampleMode>), null, typeof(SampleMode)));
+        var result = ParseContainer(typeof(ImmutableArray<SampleMode>), arguments);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableArray<SampleMode> values })
         {
@@ -120,7 +100,7 @@ public sealed class ContainersTests
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableDictionary_And_Uses_Last_Value_For_Duplicates()
+    public async Task ParseBuiltInExtended_Parses_ImmutableDictionary_And_Uses_Last_Value_For_Duplicates()
     {
         ImmutableArray<Token> arguments =
         [
@@ -128,16 +108,11 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("answer=42")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableDictionary<string, int>), typeof(string), typeof(int)));
-
-        await AssertImmutableDictionary(result, [new KeyValuePair<string, int>("answer", 42)]);
+        await AssertImmutableDictionary(ParseContainer(typeof(ImmutableDictionary<string, int>), arguments), [new KeyValuePair<string, int>("answer", 42)]);
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableDictionary_With_Enum_Keys_And_Values()
+    public async Task ParseBuiltInExtended_Parses_ImmutableDictionary_With_Enum_Keys_And_Values()
     {
         ImmutableArray<Token> arguments =
         [
@@ -145,10 +120,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("advanced=basic")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableDictionary<SampleMode, SampleMode>), typeof(SampleMode), typeof(SampleMode)));
+        var result = ParseContainer(typeof(ImmutableDictionary<SampleMode, SampleMode>), arguments);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableDictionary<SampleMode, SampleMode> dictionary })
         {
@@ -160,7 +132,7 @@ public sealed class ContainersTests
     }
 
     [Test]
-    public async Task CreateParsing_Parses_ImmutableSortedDictionary_With_Escaped_Equals_And_Value_Equals()
+    public async Task ParseBuiltInExtended_Parses_ImmutableSortedDictionary_With_Escaped_Equals_And_Value_Equals()
     {
         ImmutableArray<Token> arguments =
         [
@@ -168,10 +140,7 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("plain=value=tail")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableSortedDictionary<string, string>), typeof(string), typeof(string)));
+        var result = ParseContainer(typeof(ImmutableSortedDictionary<string, string>), arguments);
 
         if (result is not ParsingFinished { UntypedResult: ImmutableSortedDictionary<string, string> dictionary })
         {
@@ -183,72 +152,66 @@ public sealed class ContainersTests
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_Invalid_Element_Value()
+    public async Task ParseBuiltInExtended_Uses_Definition_Format_For_Temporal_Elements()
+    {
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("20260508"),
+            new ArgumentOrCommandToken("20260509")
+        ];
+
+        var result = ParseContainer(typeof(ImmutableArray<DateOnly>), arguments, format: "yyyyMMdd");
+
+        if (result is not ParsingFinished { UntypedResult: ImmutableArray<DateOnly> values })
+        {
+            throw new InvalidOperationException($"Expected {nameof(ParsingFinished)}, got {result.GetType().FullName}.");
+        }
+
+        await Assert.That(values).IsEquivalentTo([new DateOnly(2026, 5, 8), new DateOnly(2026, 5, 9)]);
+    }
+
+    [Test]
+    public async Task ParseBuiltInExtended_Returns_InvalidArgument_For_Invalid_Element_Value()
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("not-an-int")];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableArray<int>), null, typeof(int)));
-
-        await AssertInvalidArgument(result, "not-an-int", "int at NumberStyles.Integer");
+        await AssertInvalidArgument(ParseContainer(typeof(ImmutableArray<int>), arguments), "not-an-int", "Int32 at NumberStyles.Integer");
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_Invalid_Enum_Element_Value()
+    public async Task ParseBuiltInExtended_Returns_InvalidArgument_For_Invalid_Enum_Element_Value()
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways")];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableArray<SampleMode>), null, typeof(SampleMode)));
-
-        await AssertInvalidArgument(result, "sideways", "SampleMode enum");
+        await AssertInvalidArgument(ParseContainer(typeof(ImmutableArray<SampleMode>), arguments), "sideways", "SampleMode enum");
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_Invalid_Enum_Dictionary_Key()
+    public async Task ParseBuiltInExtended_Returns_InvalidArgument_For_Invalid_Enum_Dictionary_Key()
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("sideways=basic")];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableDictionary<SampleMode, SampleMode>), typeof(SampleMode), typeof(SampleMode)));
-
-        await AssertInvalidArgument(result, "sideways", "SampleMode enum");
+        await AssertInvalidArgument(ParseContainer(typeof(ImmutableDictionary<SampleMode, SampleMode>), arguments), "sideways", "SampleMode enum");
     }
 
     [Test]
-    public async Task CreateParsing_Returns_InvalidArgument_For_Missing_Dictionary_Separator()
+    public async Task ParseBuiltInExtended_Returns_InvalidArgument_For_Missing_Dictionary_Separator()
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(@"missing\=separator")];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableDictionary<string, string>), typeof(string), typeof(string)));
-
-        await AssertInvalidArgument(result, @"missing\=separator", "key=value");
+        await AssertInvalidArgument(ParseContainer(typeof(ImmutableDictionary<string, string>), arguments), @"missing\=separator", "key=value");
     }
 
     [Test]
-    public async Task CreateParsing_Returns_GotError_For_Unsupported_Types()
+    public async Task ParseBuiltInExtended_Returns_GotError_For_Unsupported_Types()
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken("1.0=value")];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableDictionary<Version, string>), typeof(Version), typeof(string)));
-
-        await AssertGotError<NotSupportedException>(result);
+        await AssertGotError<NotSupportedException>(ParseContainer(typeof(ImmutableDictionary<Version, string>), arguments));
     }
 
     [Test]
-    public async Task CreateParsing_Returns_GotError_For_NonComparable_Sorted_Values()
+    public async Task ParseBuiltInExtended_Returns_GotError_For_NonComparable_Sorted_Values()
     {
         ImmutableArray<Token> arguments =
         [
@@ -256,12 +219,17 @@ public sealed class ContainersTests
             new ArgumentOrCommandToken("https://example.com/b")
         ];
 
-        var result = ContainerParser.CreateParsing(
-            DefaultOptions,
-            arguments,
-            new ContainerType(typeof(ImmutableSortedSet<Uri>), null, typeof(Uri)));
+        await AssertGotError<Exception>(ParseContainer(typeof(ImmutableSortedSet<Uri>), arguments));
+    }
 
-        await AssertGotError<Exception>(result);
+    private static ParsingResult ParseContainer(Type targetType,
+                                                ImmutableArray<Token> arguments,
+                                                string? format = null,
+                                                TypeProviders? customProviders = null)
+    {
+        var visibleProviders = TypeProviderResolver.CreateVisibleProviders(customProviders ?? TypeProviders.Empty);
+        return TypeProviderResolver.ParseBuiltInExtended(DefaultOptions, arguments, targetType, format, visibleProviders)
+               ?? throw new InvalidOperationException($"No built-in container provider handled '{targetType.FullName}'.");
     }
 
     private static async Task AssertImmutableArray(ParsingResult result, ImmutableArray<int> expected)
