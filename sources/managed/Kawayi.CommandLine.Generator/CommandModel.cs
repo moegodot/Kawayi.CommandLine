@@ -31,7 +31,6 @@ internal static class MetadataNames
     public const string SymbolExporter = "Kawayi.CommandLine.Abstractions.ISymbolExporter";
     public const string CliSchemaExporter = "Kawayi.CommandLine.Abstractions.ICliSchemaExporter";
     public const string Bindable = "Kawayi.CommandLine.Abstractions.IBindable";
-    public const string Parsable = "Kawayi.CommandLine.Abstractions.IParsable";
 }
 
 internal static class GeneratorFormats
@@ -68,7 +67,6 @@ internal sealed class CommandModel
         bool implementsSymbolExporter,
         bool implementsCliSchemaExporter,
         bool implementsBindable,
-        bool hasParsableSelfInterface,
         ImmutableArray<MemberModel> members,
         ImmutableArray<DiagnosticInfo> symbolDiagnostics)
     {
@@ -83,7 +81,6 @@ internal sealed class CommandModel
         ImplementsSymbolExporter = implementsSymbolExporter;
         ImplementsCliSchemaExporter = implementsCliSchemaExporter;
         ImplementsBindable = implementsBindable;
-        HasParsableSelfInterface = hasParsableSelfInterface;
         Members = members;
         SymbolDiagnostics = symbolDiagnostics;
     }
@@ -109,8 +106,6 @@ internal sealed class CommandModel
     public bool ImplementsCliSchemaExporter { get; }
 
     public bool ImplementsBindable { get; }
-
-    public bool HasParsableSelfInterface { get; }
 
     public ImmutableArray<MemberModel> Members { get; }
 
@@ -344,7 +339,6 @@ internal sealed class CommandModel
             ImplementsInterface(typeSymbol, MetadataNames.SymbolExporter),
             ImplementsInterface(typeSymbol, MetadataNames.CliSchemaExporter),
             ImplementsInterface(typeSymbol, MetadataNames.Bindable),
-            HasParsableSelfInterfaceImpl(typeSymbol),
             members.ToImmutable(),
             diagnostics.ToImmutable());
     }
@@ -699,27 +693,6 @@ internal sealed class CommandModel
         {
             if (syntaxReference.GetSyntax() is TypeDeclarationSyntax declaration &&
                 declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool HasParsableSelfInterfaceImpl(INamedTypeSymbol typeSymbol)
-    {
-        foreach (var implementedInterface in typeSymbol.AllInterfaces)
-        {
-            if (!string.Equals(implementedInterface.OriginalDefinition.ToDisplayString(),
-                               MetadataNames.Parsable + "<T>",
-                               StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (implementedInterface.TypeArguments.Length == 1 &&
-                SymbolEqualityComparer.Default.Equals(implementedInterface.TypeArguments[0], typeSymbol))
             {
                 return true;
             }

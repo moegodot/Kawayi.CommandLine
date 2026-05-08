@@ -17,6 +17,7 @@ namespace Kawayi.CommandLine.Abstractions;
 /// <param name="EnableStyledOutput">Whether ANSI styling for <see cref="Output"/> is enabled.</param>
 /// <param name="Debug">Whether debug output is enabled.</param>
 /// <param name="StyleTable">The styles used for formatted output.</param>
+/// <param name="TypeProviders">The custom exact and extended type providers consulted during parsing.</param>
 public sealed record ParsingOptions(
     ProgramInformation Program,
     ImmutableHashSet<Token> VersionFlags,
@@ -26,7 +27,8 @@ public sealed record ParsingOptions(
     bool EnableStyledDebugOutput,
     bool EnableStyledOutput,
     bool Debug,
-    StyleTable StyleTable
+    StyleTable StyleTable,
+    TypeProviders TypeProviders
 )
 {
     /// <summary>
@@ -136,7 +138,8 @@ public sealed record ParsingOptions(
            DefaultEnableStyle,
            DefaultEnableStyle,
            DefaultDebug,
-           StyleTable.Default)
+           StyleTable.Default,
+           TypeProviders.Empty)
     {
     }
 

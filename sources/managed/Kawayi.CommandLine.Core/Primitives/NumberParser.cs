@@ -12,14 +12,6 @@ namespace Kawayi.CommandLine.Core.Primitives;
 /// Parses integral numeric types from command-line tokens.
 /// </summary>
 public sealed class NumberParser
-    : Abstractions.IParsable<byte>,
-      Abstractions.IParsable<sbyte>,
-      Abstractions.IParsable<ushort>,
-      Abstractions.IParsable<short>,
-      Abstractions.IParsable<int>,
-      Abstractions.IParsable<uint>,
-      Abstractions.IParsable<long>,
-      Abstractions.IParsable<ulong>
 {
     /// <summary>
     /// Gets the default number styles used for integral parsing.

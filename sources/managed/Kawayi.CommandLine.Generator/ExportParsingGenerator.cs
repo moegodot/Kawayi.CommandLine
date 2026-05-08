@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Kawayi.CommandLine.Generator;
 
 /// <summary>
-/// Generates <c>ICliSchemaExporter</c> and <c>IParsable&lt;T&gt;</c> implementations for
+/// Generates <c>ICliSchemaExporter</c> implementations for
 /// types annotated with <c>ExportParsingAttribute</c> or <c>CommandAttribute</c>.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
@@ -183,15 +183,10 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             GeneratorSource.AppendIndentedLine(builder, i, "{");
         }
 
-        var interfaces = ImmutableArray.CreateBuilder<string>(2);
+        var interfaces = ImmutableArray.CreateBuilder<string>(1);
         if (!model.ImplementsCliSchemaExporter)
         {
             interfaces.Add("global::Kawayi.CommandLine.Abstractions.ICliSchemaExporter");
-        }
-
-        if (!model.HasParsableSelfInterface)
-        {
-            interfaces.Add($"global::Kawayi.CommandLine.Abstractions.IParsable<{GeneratorSource.BuildSelfTypeReference(model.TypeSymbol)}>");
         }
 
         GeneratorSource.AppendIndentedLine(
@@ -221,7 +216,6 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         var typeNameLiteral = SymbolDisplay.FormatLiteral(
             model.TypeSymbol.ToDisplayString(GeneratorFormats.FullyQualifiedNullableType),
             true);
-        var selfTypeReference = GeneratorSource.BuildSelfTypeReference(model.TypeSymbol);
         var hasPromotedGlobalSubcommands = target.Subcommands.Any(static item => item.IsGlobalSubcommand);
         var hasRegularSubcommands = target.Subcommands.Any(static item => !item.IsGlobalSubcommand);
         var hasInheritedSchema = target.BaseSchemaExporterTypeName is not null;
@@ -305,28 +299,6 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         }
 
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <summary>");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// Parses the supplied tokens by using the generated schema for this command type.");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// </summary>");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"options\">The parsing options for this operation.</param>");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"arguments\">The tokens to parse.</param>");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <param name=\"initialState\">The initial state supplied to satisfy the IParsable contract.</param>");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <returns>The parsing result.</returns>");
-        GeneratorSource.AppendIndentedLine(
-            builder,
-            indentLevel,
-            $"public static global::Kawayi.CommandLine.Abstractions.ParsingResult CreateParsing(global::Kawayi.CommandLine.Abstractions.ParsingOptions options, global::System.Collections.Immutable.ImmutableArray<global::Kawayi.CommandLine.Abstractions.Token> arguments, {selfTypeReference} initialState)");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(options);");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "_ = initialState;");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var builder = ExportParsing(options);");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var snapshot = builder.Build();");
-        GeneratorSource.AppendIndentedLine(builder,
-                           indentLevel + 1,
-                           "return global::Kawayi.CommandLine.Core.CliSchemaParser.CreateParsing(options, arguments, snapshot);");
-        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
-
         if (hasInheritedSchema)
         {
             AppendInheritedSchemaMergeHelpers(builder, indentLevel);

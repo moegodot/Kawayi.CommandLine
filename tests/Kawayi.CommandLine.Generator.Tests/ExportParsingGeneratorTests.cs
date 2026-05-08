@@ -61,7 +61,8 @@ public class ExportParsingGeneratorTests
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
+        await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "CreateParsing")).IsFalse();
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
         await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("verbose-option"))).IsTrue();
@@ -71,7 +72,7 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
-    public async Task Generated_Parsable_CreateParsing_Composes_With_ExportParsing()
+    public async Task Generated_CliSchema_Parse_Composes_With_ExportParsing()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -114,13 +115,11 @@ public class ExportParsingGeneratorTests
         ];
 
         var parsingResult = GetGeneratedParsingResult(result, "Fixtures.Command", arguments);
-        var subcommand = AssertSubcommand(parsingResult, "serve-command");
-        var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
-        var rootValues = AssertFinishedCollection(subcommand.ContinueParseAction());
-        var childValues = rootValues.Subcommands[subcommand.Definition];
+        var rootValues = AssertFinishedCollection(parsingResult);
+        var childValues = rootValues.Subcommands.Single().Value;
 
-        await Assert.That(parentValues.CurrentCommandDefinition).IsNull();
-        await Assert.That(HasExplicitString(parentValues, "input", "payload")).IsTrue();
+        await Assert.That(rootValues.CurrentCommandDefinition).IsNull();
+        await Assert.That(HasExplicitString(rootValues, "input", "payload")).IsTrue();
         await Assert.That(childValues.CurrentCommandDefinition?.Information.Name.Value).IsEqualTo("serve-command");
         await Assert.That(HasExplicitBoolean(childValues, "force-option")).IsTrue();
     }
@@ -169,7 +168,7 @@ public class ExportParsingGeneratorTests
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
         await Assert.That(snapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("serve-command"))).IsTrue();
         await Assert.That(snapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken(exportedSubcommand.Information.Name.Value))).IsTrue();
@@ -209,7 +208,7 @@ public class ExportParsingGeneratorTests
         await Assert.That(targetType.BaseType?.ToDisplayString()).IsEqualTo("Fixtures.BarCommand");
         await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.ISymbolExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
-        await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.FooCommand>")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.FooCommand>")).IsFalse();
         await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("verbose"))).IsTrue();
         await Assert.That(diagnostics.Any(static item => item.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
@@ -507,7 +506,7 @@ public class ExportParsingGeneratorTests
             new ArgumentOrCommandToken("true")
         ];
 
-        var parsingResult = GetGeneratedParsingResult(result, "Fixtures.Command", arguments);
+        var parsingResult = GetGeneratedDeferredParsingResult(result, "Fixtures.Command", arguments);
         var subcommand = AssertSubcommand(parsingResult, "watch");
         var parentValues = AssertFinishedCollection(subcommand.ParentCommand);
         var rootValues = AssertFinishedCollection(subcommand.ContinueParseAction());
@@ -602,7 +601,8 @@ public class ExportParsingGeneratorTests
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
         await Assert.That(snapshot.Properties.Values.Distinct().Count()).IsEqualTo(1);
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
-        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
+        await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "CreateParsing")).IsFalse();
     }
 
     [Test]
@@ -862,15 +862,28 @@ public class ExportParsingGeneratorTests
         string targetTypeMetadataName,
         ImmutableArray<Token> arguments)
     {
-        var targetType = GetEmittedType(outcome, targetTypeMetadataName);
-        var method = targetType.GetMethod("CreateParsing", BindingFlags.Public | BindingFlags.Static)
-            ?? throw new InvalidOperationException("Generated type does not define the expected CreateParsing method.");
-        var initialState = Activator.CreateInstance(targetType)
-            ?? throw new InvalidOperationException("Could not create the generated parsing target type.");
-        var rawValue = method.Invoke(null, [CreateOptions(), arguments, initialState])
-            ?? throw new InvalidOperationException("Generated CreateParsing method returned null.");
+        return ContinueSubcommands(CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            arguments,
+            GetCliSchemaBuilder(outcome, targetTypeMetadataName).Build()));
+    }
 
-        return (ParsingResult)rawValue;
+    private static ParsingResult GetGeneratedDeferredParsingResult(
+        GeneratorRunOutcome outcome,
+        string targetTypeMetadataName,
+        ImmutableArray<Token> arguments)
+    {
+        return CliSchemaParser.CreateParsing(CreateOptions(), arguments, GetCliSchemaBuilder(outcome, targetTypeMetadataName).Build());
+    }
+
+    private static ParsingResult ContinueSubcommands(ParsingResult result)
+    {
+        while (result is Subcommand subcommand)
+        {
+            result = subcommand.ContinueParseAction();
+        }
+
+        return result;
     }
 
     private static Type GetEmittedType(GeneratorRunOutcome outcome, string targetTypeMetadataName)
@@ -899,7 +912,8 @@ public class ExportParsingGeneratorTests
             false,
             false,
             false,
-            StyleTable.Default);
+            StyleTable.Default,
+            TypeProviders.Empty);
     }
 
     private static Diagnostic GetSingleDiagnostic(GeneratorRunOutcome outcome, string id)
@@ -920,6 +934,15 @@ public class ExportParsingGeneratorTests
     {
         var targetType = outcome.Compilation.GetTypeByMetadataName(targetTypeMetadataName);
         return targetType?.AllInterfaces.Any(item => item.ToDisplayString() == interfaceMetadataName) == true;
+    }
+
+    private static bool HasPublicStaticMethod(
+        GeneratorRunOutcome outcome,
+        string targetTypeMetadataName,
+        string methodName)
+    {
+        var targetType = GetEmittedType(outcome, targetTypeMetadataName);
+        return targetType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static) is not null;
     }
 
     private static Cli AssertFinishedCollection(ParsingResult result)

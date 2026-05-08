@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
 using Kawayi.CommandLine.Core.Attributes;
@@ -21,8 +22,8 @@ public sealed class GeneratedCommandIntegrationTests
         var schema = builder.Build();
 
         await Assert.That(typeof(ICliSchemaExporter).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
-        await Assert.That(typeof(Kawayi.CommandLine.Abstractions.IParsable<SchemaCommand>).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
         await Assert.That(typeof(IBindable).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
+        await Assert.That(typeof(SchemaCommand).GetMethod("CreateParsing", BindingFlags.Public | BindingFlags.Static)).IsNull();
         await Assert.That(SchemaCommand.Documents.Keys).Contains("Input");
         await Assert.That(SchemaCommand.Symbols.Length).IsGreaterThanOrEqualTo(6);
         await Assert.That(schema.GeneratedFrom).IsEqualTo(typeof(SchemaCommand));
@@ -40,7 +41,7 @@ public sealed class GeneratedCommandIntegrationTests
         await Assert.That(schema.SubcommandDefinitions[new ArgumentOrCommandToken("srv")].Information.Name.Value).IsEqualTo("serve");
         await Assert.That(schema.SubcommandDefinitions[new ArgumentOrCommandToken("s")].Information.Name.Value).IsEqualTo("serve");
 
-        var help = AssertHelp(SchemaCommand.CreateParsing(options, Tokenize("--help"), new SchemaCommand()));
+        var help = AssertHelp(schema.Parse(Tokenize("--help"), options));
         help.FlagAction();
         var helpText = output.ToString();
 
@@ -152,8 +153,8 @@ public sealed class GeneratedCommandIntegrationTests
     [Test]
     public async Task Bool_Options_Do_Not_Consume_NonBoolean_Values_Or_Subcommand_Names()
     {
-        var nonBoolean = BoolOnlyCommand.CreateParsing(CreateOptions(), Tokenize("--flag", "maybe"), new BoolOnlyCommand());
-        var subcommandResult = BoolEdgeCommand.CreateParsing(CreateOptions(), Tokenize("--flag", "run"), new BoolEdgeCommand());
+        var nonBoolean = Parse<BoolOnlyCommand>("--flag", "maybe");
+        var subcommandResult = StartParse<BoolEdgeCommand>(Tokenize("--flag", "run"));
         var subcommand = AssertSubcommand(subcommandResult, "run");
         var parent = AssertFinished(subcommand.ParentCommand);
 
@@ -164,18 +165,18 @@ public sealed class GeneratedCommandIntegrationTests
     [Test]
     public async Task Parser_Reports_Scalar_Unknown_And_Invalid_Value_Errors()
     {
-        await Assert.That(ErrorCommand.CreateParsing(CreateOptions(), Tokenize(), new ErrorCommand())).IsTypeOf<InvalidArgumentDetected>();
-        await Assert.That(ErrorCommand.CreateParsing(CreateOptions(), Tokenize("--name"), new ErrorCommand())).IsTypeOf<InvalidArgumentDetected>();
-        await Assert.That(ErrorCommand.CreateParsing(CreateOptions(), Tokenize("--name", "a", "--name", "b"), new ErrorCommand())).IsTypeOf<InvalidArgumentDetected>();
-        await Assert.That(ErrorCommand.CreateParsing(CreateOptions(), Tokenize("--unknown"), new ErrorCommand())).IsTypeOf<UnknownArgumentDetected>();
-        await Assert.That(ErrorCommand.CreateParsing(CreateOptions(), Tokenize("--number", "abc"), new ErrorCommand())).IsTypeOf<InvalidArgumentDetected>();
+        await Assert.That(Parse<ErrorCommand>()).IsTypeOf<InvalidArgumentDetected>();
+        await Assert.That(Parse<ErrorCommand>("--name")).IsTypeOf<InvalidArgumentDetected>();
+        await Assert.That(Parse<ErrorCommand>("--name", "a", "--name", "b")).IsTypeOf<InvalidArgumentDetected>();
+        await Assert.That(Parse<ErrorCommand>("--unknown")).IsTypeOf<UnknownArgumentDetected>();
+        await Assert.That(Parse<ErrorCommand>("--number", "abc")).IsTypeOf<InvalidArgumentDetected>();
     }
 
     [Test]
     public async Task Dash_Prefixed_Numeric_Values_And_Escaped_Strings_Parse_As_Values()
     {
         var command = ParseAndBind<DashCommand>("-1", @"\--literal", "--threshold", "-1.5");
-        var knownOptionAsValue = DashCommand.CreateParsing(CreateOptions(), Tokenize("0", "literal", "--threshold", "-v"), new DashCommand());
+        var knownOptionAsValue = Parse<DashCommand>("0", "literal", "--threshold", "-v");
 
         await Assert.That(command.Count).IsEqualTo(-1);
         await Assert.That(command.Literal).IsEqualTo("--literal");
@@ -224,9 +225,9 @@ public sealed class GeneratedCommandIntegrationTests
         {
             DefaultValueFactory = static () => 3
         };
-        var cli = AssertFinished(EffectiveCommand.CreateParsing(CreateOptions(), Tokenize(), new EffectiveCommand()));
+        var cli = AssertFinished(Parse<EffectiveCommand>());
         var commandWithoutAugmentation = cli.Bind<EffectiveCommand>();
-        var augmentedCli = AssertFinished(CliSchemaParser.CreateParsing(CreateOptions(), Tokenize(), builder.Build()));
+        var augmentedCli = AssertFinished(builder.Build().Parse(Tokenize(), CreateOptions()));
         var augmentedCommand = augmentedCli.Bind<EffectiveCommand>();
 
         await Assert.That(commandWithoutAugmentation.Retries).IsEqualTo(-1);
@@ -249,18 +250,17 @@ public sealed class GeneratedCommandIntegrationTests
             DefaultValueFactory = static () => 0
         };
 
-        await Assert.That(RequiredCommand.CreateParsing(CreateOptions(), Tokenize(), new RequiredCommand())).IsTypeOf<InvalidArgumentDetected>();
-        await Assert.That(CliSchemaParser.CreateParsing(CreateOptions(), Tokenize(), nullBuilder.Build())).IsTypeOf<InvalidArgumentDetected>();
-        await Assert.That(ValidationCommand.CreateParsing(CreateOptions(), Tokenize("--positive", "0"), new ValidationCommand())).IsTypeOf<FailedValidation>();
-        await Assert.That(ValidationCommand.CreateParsing(CreateOptions(), Tokenize("--throwing", "1"), new ValidationCommand())).IsTypeOf<FailedValidation>();
-        await Assert.That(CliSchemaParser.CreateParsing(CreateOptions(), Tokenize(), defaultValidationBuilder.Build())).IsTypeOf<FailedValidation>();
+        await Assert.That(Parse<RequiredCommand>()).IsTypeOf<InvalidArgumentDetected>();
+        await Assert.That(nullBuilder.Build().Parse(Tokenize(), CreateOptions())).IsTypeOf<InvalidArgumentDetected>();
+        await Assert.That(Parse<ValidationCommand>("--positive", "0")).IsTypeOf<FailedValidation>();
+        await Assert.That(Parse<ValidationCommand>("--throwing", "1")).IsTypeOf<FailedValidation>();
+        await Assert.That(defaultValidationBuilder.Build().Parse(Tokenize(), CreateOptions())).IsTypeOf<FailedValidation>();
     }
 
     [Test]
     public async Task Regular_Subcommands_Are_Deferred_Recursive_And_Alias_Aware()
     {
-        var result = SubcommandRoot.CreateParsing(CreateOptions(), Tokenize("srv", "localhost", "--port", "8080", "watch", "--interval", "5"), new SubcommandRoot());
-        var root = AssertFinished(ContinueSubcommands(result));
+        var root = AssertFinished(Parse<SubcommandRoot>("srv", "localhost", "--port", "8080", "watch", "--interval", "5"));
         var command = root.Bind<SubcommandRoot>();
 
         await Assert.That(command.Serve).IsNotNull();
@@ -273,8 +273,8 @@ public sealed class GeneratedCommandIntegrationTests
     [Test]
     public async Task Subcommands_Are_Preferred_But_ArgumentToken_Does_Not_Match_Subcommands()
     {
-        var subcommand = SubcommandRoot.CreateParsing(CreateOptions(), Tokenize("serve", "localhost"), new SubcommandRoot());
-        var argumentToken = SubcommandRoot.CreateParsing(CreateOptions(), [new ArgumentToken("serve")], new SubcommandRoot());
+        var subcommand = StartParse<SubcommandRoot>(Tokenize("serve", "localhost"));
+        var argumentToken = StartParse<SubcommandRoot>([new ArgumentToken("serve")]);
         var command = AssertFinished(argumentToken).Bind<SubcommandRoot>();
 
         AssertSubcommand(subcommand, "serve");
@@ -296,39 +296,41 @@ public sealed class GeneratedCommandIntegrationTests
     [Test]
     public async Task Subcommand_Scope_Help_And_Version_Flags_Terminate_That_Scope()
     {
-        var help = SubcommandRoot.CreateParsing(CreateOptions(), Tokenize("serve", "localhost", "--help"), new SubcommandRoot());
-        var version = SubcommandRoot.CreateParsing(CreateOptions(), Tokenize("serve", "localhost", "--version"), new SubcommandRoot());
+        var help = StartParse<SubcommandRoot>(Tokenize("serve", "localhost", "--help"));
+        var version = StartParse<SubcommandRoot>(Tokenize("serve", "localhost", "--version"));
 
         await Assert.That(AssertSubcommand(help, "serve").ContinueParseAction()).IsTypeOf<HelpFlagsDetected>();
         await Assert.That(AssertSubcommand(version, "serve").ContinueParseAction()).IsTypeOf<VersionFlagsDetected>();
     }
 
     private static TCommand ParseAndBind<TCommand>(params string[] arguments)
-        where TCommand : Kawayi.CommandLine.Abstractions.IParsable<TCommand>, IBindable, new()
+        where TCommand : ICliSchemaExporter, IBindable, new()
     {
         return ParseCli<TCommand>(arguments).Bind<TCommand>();
     }
 
     private static Cli ParseCli<TCommand>(params string[] arguments)
-        where TCommand : Kawayi.CommandLine.Abstractions.IParsable<TCommand>, new()
+        where TCommand : ICliSchemaExporter
     {
         return ParseCli<TCommand>(Tokenize(arguments));
     }
 
     private static Cli ParseCli<TCommand>(ImmutableArray<Token> tokens)
-        where TCommand : Kawayi.CommandLine.Abstractions.IParsable<TCommand>, new()
+        where TCommand : ICliSchemaExporter
     {
-        return AssertFinished(ContinueSubcommands(TCommand.CreateParsing(CreateOptions(), tokens, new TCommand())));
+        return AssertFinished(TCommand.ExportParsing(CreateOptions()).Build().Parse(tokens, CreateOptions()));
     }
 
-    private static ParsingResult ContinueSubcommands(ParsingResult result)
+    private static ParsingResult Parse<TCommand>(params string[] arguments)
+        where TCommand : ICliSchemaExporter
     {
-        while (result is Subcommand subcommand)
-        {
-            result = subcommand.ContinueParseAction();
-        }
+        return TCommand.ExportParsing(CreateOptions()).Build().Parse(Tokenize(arguments), CreateOptions());
+    }
 
-        return result;
+    private static ParsingResult StartParse<TCommand>(ImmutableArray<Token> tokens)
+        where TCommand : ICliSchemaExporter
+    {
+        return CliSchemaParser.CreateParsing(CreateOptions(), tokens, TCommand.ExportParsing(CreateOptions()).Build());
     }
 
     private static ImmutableArray<Token> Tokenize(params string[] arguments)
@@ -347,7 +349,8 @@ public sealed class GeneratedCommandIntegrationTests
             false,
             false,
             false,
-            StyleTable.Default);
+            StyleTable.Default,
+            TypeProviders.Empty);
     }
 
     private static Cli AssertFinished(ParsingResult result)

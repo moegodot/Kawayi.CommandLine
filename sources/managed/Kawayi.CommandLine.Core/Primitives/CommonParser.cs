@@ -12,13 +12,6 @@ namespace Kawayi.CommandLine.Core.Primitives;
 /// Parses common framework types from command-line tokens.
 /// </summary>
 public sealed class CommonParser
-    : Abstractions.IParsable<Guid>,
-      Abstractions.IParsable<Uri>,
-      Abstractions.IParsable<string>,
-      Abstractions.IParsable<DateTime>,
-      Abstractions.IParsable<DateTimeOffset>,
-      Abstractions.IParsable<DateOnly>,
-      Abstractions.IParsable<TimeOnly>
 {
     /// <summary>
     /// Parses a <see cref="Guid"/> value from the supplied tokens.

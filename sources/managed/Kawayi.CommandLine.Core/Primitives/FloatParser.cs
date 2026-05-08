@@ -11,9 +11,7 @@ namespace Kawayi.CommandLine.Core.Primitives;
 /// <summary>
 /// Parses floating-point numeric types from command-line tokens.
 /// </summary>
-public sealed class FloatParser : Abstractions.IParsable<float>,
-                                     Abstractions.IParsable<double>,
-                                     Abstractions.IParsable<decimal>
+public sealed class FloatParser
 {
     /// <summary>
     /// Gets the default number styles used for floating-point parsing.

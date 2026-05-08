@@ -86,7 +86,7 @@ internal static class Program
         var effectiveBuilder = ShouldUseRelaxedSubcommandHelpRoute(tokens)
             ? CloneForScopedHelp(builder)
             : builder;
-        var result = CliSchemaParser.CreateParsing(parsingOptions, tokens, effectiveBuilder.Build());
+        var result = effectiveBuilder.Build().Parse(tokens, parsingOptions);
         return HandleResult(result);
     }
 
@@ -107,20 +107,21 @@ internal static class Program
             ParsingOptions.DefaultEnableStyle,
             ParsingOptions.DefaultEnableStyle,
             ParsingOptions.DefaultDebug,
-            styleTable);
+            styleTable,
+            TypeProviders.Empty);
     }
 
     private static void PrintOverview<T>(TextWriter output, ParsingOptions options)
-        where T : IDocumentExporter, ISymbolExporter, ICliSchemaExporter, Kawayi.CommandLine.Abstractions.IParsable<T>, new()
+        where T : IDocumentExporter, ISymbolExporter, ICliSchemaExporter
     {
-        var warmupResult = T.CreateParsing(options, [new LongOptionToken("help")], new T());
         var parserSurface = T.ExportParsing(options);
+        var warmupResult = parserSurface.Build().Parse([new LongOptionToken("help")], options);
 
         output.WriteLine("Kawayi.CommandLine Attribute Max Demo");
         output.WriteLine($"Documents: {T.Documents.Count}");
         output.WriteLine($"Symbols: {T.Symbols.Length}");
         output.WriteLine($"Root surface: {parserSurface.Argument.Count} arguments, {parserSurface.Properties.Count} options, {parserSurface.SubcommandDefinitions.Count} subcommands");
-        output.WriteLine($"Warm-up via IParsable<T>: {warmupResult.GetType().Name}");
+        output.WriteLine($"Warm-up via CliSchema.Parse(...): {warmupResult.GetType().Name}");
         output.WriteLine();
     }
 

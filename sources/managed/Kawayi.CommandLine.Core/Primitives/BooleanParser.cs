@@ -10,7 +10,7 @@ namespace Kawayi.CommandLine.Core.Primitives;
 /// <summary>
 /// Parses boolean values from command-line tokens.
 /// </summary>
-public sealed class BooleanParser : Abstractions.IParsable<bool>
+public sealed class BooleanParser
 {
     /// <summary>
     /// Parses a boolean value from the supplied tokens.

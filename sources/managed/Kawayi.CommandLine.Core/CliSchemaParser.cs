@@ -12,21 +12,20 @@ namespace Kawayi.CommandLine.Core;
 /// Parses tokenized command-line input by using an immutable CLI schema snapshot.
 /// </summary>
 public sealed class CliSchemaParser
-    : Abstractions.IParsable<CliSchema>
 {
     /// <summary>
     /// Parses the supplied tokens by using the specified CLI schema.
     /// </summary>
     /// <param name="options">The parsing options for this operation.</param>
     /// <param name="arguments">The tokens to parse.</param>
-    /// <param name="initialState">The schema snapshot to parse against.</param>
+    /// <param name="schema">The schema snapshot to parse against.</param>
     /// <returns>The parsing result.</returns>
-    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, CliSchema initialState)
+    public static ParsingResult CreateParsing(ParsingOptions options, ImmutableArray<Token> arguments, CliSchema schema)
     {
         ArgumentNullException.ThrowIfNull(options);
         var (parseArguments, toProgramArguments) = SplitOptionTerminator(arguments);
 
-        return ParseDeferred(options, parseArguments, toProgramArguments, initialState, null, null);
+        return ParseDeferred(options, parseArguments, toProgramArguments, schema, null, null);
     }
 
     private static (ImmutableArray<Token> ParseArguments, ImmutableArray<Token> ToProgramArguments) SplitOptionTerminator(ImmutableArray<Token> arguments)
@@ -485,123 +484,7 @@ public sealed class CliSchemaParser
 
     private static ParsingResult ParseTypedValue(ParsingOptions options, ImmutableArray<Token> tokens, Type targetType)
     {
-        var effectiveTargetType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-
-        if (effectiveTargetType == typeof(string))
-        {
-            var value = tokens.IsDefaultOrEmpty ? string.Empty : tokens[^1].Value;
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<string>(value),
-                                    new DebugContext(nameof(CliSchemaParser),
-                                                     Tokens: tokens,
-                                                     TargetType: effectiveTargetType,
-                                                     Expectation: "string",
-                                                     SelectedToken: value,
-                                                     Summary: "materialized string value"));
-        }
-
-        if (TryCreateContainerType(effectiveTargetType, out var containerType))
-        {
-            return ContainerParser.CreateParsing(options, tokens, containerType);
-        }
-
-        if (effectiveTargetType.IsEnum)
-        {
-            return EnumParser.CreateParsing(options, tokens, effectiveTargetType, Enum.ToObject(effectiveTargetType, 0));
-        }
-
-        if (effectiveTargetType == typeof(bool))
-        {
-            return BooleanParser.CreateParsing(options, tokens, false);
-        }
-
-        if (effectiveTargetType == typeof(byte))
-        {
-            return NumberParser.CreateParsing(options, tokens, (byte)0);
-        }
-
-        if (effectiveTargetType == typeof(sbyte))
-        {
-            return NumberParser.CreateParsing(options, tokens, (sbyte)0);
-        }
-
-        if (effectiveTargetType == typeof(ushort))
-        {
-            return NumberParser.CreateParsing(options, tokens, (ushort)0);
-        }
-
-        if (effectiveTargetType == typeof(short))
-        {
-            return NumberParser.CreateParsing(options, tokens, (short)0);
-        }
-
-        if (effectiveTargetType == typeof(uint))
-        {
-            return NumberParser.CreateParsing(options, tokens, 0u);
-        }
-
-        if (effectiveTargetType == typeof(int))
-        {
-            return NumberParser.CreateParsing(options, tokens, 0);
-        }
-
-        if (effectiveTargetType == typeof(ulong))
-        {
-            return NumberParser.CreateParsing(options, tokens, 0UL);
-        }
-
-        if (effectiveTargetType == typeof(long))
-        {
-            return NumberParser.CreateParsing(options, tokens, 0L);
-        }
-
-        if (effectiveTargetType == typeof(float))
-        {
-            return FloatParser.CreateParsing(options, tokens, 0f);
-        }
-
-        if (effectiveTargetType == typeof(double))
-        {
-            return FloatParser.CreateParsing(options, tokens, 0d);
-        }
-
-        if (effectiveTargetType == typeof(decimal))
-        {
-            return FloatParser.CreateParsing(options, tokens, decimal.Zero);
-        }
-
-        if (effectiveTargetType == typeof(Guid))
-        {
-            return CommonParser.CreateParsing(options, tokens, Guid.Empty);
-        }
-
-        if (effectiveTargetType == typeof(Uri))
-        {
-            return CommonParser.CreateParsing(options, tokens, new Uri("https://placeholder.invalid"));
-        }
-
-        if (effectiveTargetType == typeof(DateTime))
-        {
-            return CommonParser.CreateParsing(options, tokens, default(DateTime));
-        }
-
-        if (effectiveTargetType == typeof(DateTimeOffset))
-        {
-            return CommonParser.CreateParsing(options, tokens, default(DateTimeOffset));
-        }
-
-        if (effectiveTargetType == typeof(DateOnly))
-        {
-            return CommonParser.CreateParsing(options, tokens, default(DateOnly));
-        }
-
-        if (effectiveTargetType == typeof(TimeOnly))
-        {
-            return CommonParser.CreateParsing(options, tokens, default(TimeOnly));
-        }
-
-        return new GotError(new NotSupportedException(
-            $"Type '{targetType.FullName}' is not supported by {nameof(CliSchemaParser)}."));
+        return TypeProviderResolver.ParseValue(options, tokens, targetType, nameof(CliSchemaParser));
     }
 
     private static bool TryCreateFlagResult(ParsingOptions options,
@@ -953,7 +836,7 @@ public sealed class CliSchemaParser
             return CanParseAsValue(token, propertyType);
         }
 
-        if (!TryCreateContainerType(Nullable.GetUnderlyingType(propertyType) ?? propertyType, out var containerType))
+        if (!ContainerType.TryCreate(Nullable.GetUnderlyingType(propertyType) ?? propertyType, out var containerType))
         {
             return false;
         }
@@ -981,38 +864,6 @@ public sealed class CliSchemaParser
         }
 
         return CanParseAsValue(new ArgumentOrCommandToken(value[..separatorIndex]), keyType);
-    }
-
-    private static bool TryCreateContainerType(Type targetType, out ContainerType containerType)
-    {
-        containerType = null!;
-
-        if (!targetType.IsConstructedGenericType)
-        {
-            return false;
-        }
-
-        var genericDefinition = targetType.GetGenericTypeDefinition();
-        var genericArguments = targetType.GetGenericArguments();
-
-        if (genericDefinition == typeof(ImmutableDictionary<,>) || genericDefinition == typeof(ImmutableSortedDictionary<,>))
-        {
-            containerType = new ContainerType(targetType, genericArguments[0], genericArguments[1]);
-            return true;
-        }
-
-        if (genericDefinition == typeof(ImmutableArray<>)
-            || genericDefinition == typeof(ImmutableList<>)
-            || genericDefinition == typeof(ImmutableQueue<>)
-            || genericDefinition == typeof(ImmutableStack<>)
-            || genericDefinition == typeof(ImmutableSortedSet<>)
-            || genericDefinition == typeof(ImmutableHashSet<>))
-        {
-            containerType = new ContainerType(targetType, null, genericArguments[0]);
-            return true;
-        }
-
-        return false;
     }
 
     private static int GetLaterMinimum(ImmutableList<ParameterDefinition> arguments, int startIndex)

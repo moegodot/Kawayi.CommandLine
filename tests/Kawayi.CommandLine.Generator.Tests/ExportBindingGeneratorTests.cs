@@ -834,7 +834,8 @@ public class ExportBindingGeneratorTests
             false,
             false,
             false,
-            StyleTable.Default);
+            StyleTable.Default,
+            TypeProviders.Empty);
     }
 
     private static ImmutableArray<Diagnostic> GetGeneratorDiagnostics(GeneratorRunOutcome outcome)

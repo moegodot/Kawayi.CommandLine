@@ -1,6 +1,7 @@
 // Copyright (c) 2026 MoeGodot<me@kawayi.moe>.
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
@@ -12,6 +13,31 @@ namespace Kawayi.CommandLine.Extensions;
 /// </summary>
 public static class CliExtensions
 {
+    extension(CliSchema schema)
+    {
+        /// <summary>
+        /// Parses the supplied tokens by using the current schema snapshot.
+        /// This will parse all <see cref="Subcommand"/>, if you want to get subcommand,
+        /// use <see cref="CliSchemaParser.CreateParsing"/>.
+        /// </summary>
+        /// <param name="arguments">The tokens to parse.</param>
+        /// <param name="options">The parsing options for this operation.</param>
+        /// <returns>The terminal parsing result.</returns>
+        public ParsingResult Parse(ImmutableArray<Token> arguments, ParsingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+
+            var current = CliSchemaParser.CreateParsing(options, arguments, schema);
+
+            while (current is Subcommand subcommand)
+            {
+                current = subcommand.ContinueParseAction();
+            }
+
+            return current;
+        }
+    }
+
     extension(Cli result)
     {
         /// <summary>

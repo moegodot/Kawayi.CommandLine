@@ -781,7 +781,8 @@ public sealed class CliSchemaParserTests
             enableStyledDebugOutput,
             enableStyledOutput,
             debug,
-            StyleTable.Default);
+            StyleTable.Default,
+            TypeProviders.Empty);
     }
 
     private static Cli AssertFinished(ParsingResult result)

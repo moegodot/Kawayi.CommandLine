@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
-using Kawayi.CommandLine.Core.Primitives;
 using Kawayi.Escapes;
 
 namespace Kawayi.CommandLine.Core;
@@ -14,7 +13,6 @@ namespace Kawayi.CommandLine.Core;
 /// Parses supported collection and dictionary container types from command-line tokens.
 /// </summary>
 public class ContainerParser
-    : Abstractions.IParsable<ContainerType>
 {
     private static readonly MethodInfo BuildSequenceContainerRuntimeMethod = typeof(ContainerParser)
         .GetMethod(nameof(BuildSequenceContainerRuntime), BindingFlags.NonPublic | BindingFlags.Static)
@@ -237,12 +235,7 @@ public class ContainerParser
             return BuildSequenceContainer<TimeOnly>(genericDefinition, parsedValues);
         }
 
-        if (valueType.IsEnum)
-        {
-            return BuildSequenceContainerForRuntimeType(genericDefinition, valueType, parsedValues);
-        }
-
-        return CreateUnsupportedContainerResult(genericDefinition);
+        return BuildSequenceContainerForRuntimeType(genericDefinition, valueType, parsedValues);
     }
 
     private static ParsingResult BuildDictionaryContainer(Type genericDefinition,
@@ -345,128 +338,15 @@ public class ContainerParser
             return BuildDictionaryContainerForKey<TimeOnly>(genericDefinition, valueType, entries);
         }
 
-        if (keyType.IsEnum)
-        {
-            return BuildDictionaryContainerForRuntimeKeyType(genericDefinition, keyType, valueType, entries);
-        }
-
-        return CreateUnsupportedContainerResult(genericDefinition);
+        return BuildDictionaryContainerForRuntimeKeyType(genericDefinition, keyType, valueType, entries);
     }
 
     private static ParsingResult ParseValue(ParsingOptions options,
                                             string rawValue,
                                             Type targetType)
     {
-        if (targetType == typeof(string))
-        {
-            return DebugOutput.Emit(options,
-                                    new ParsingFinished<string>(rawValue),
-                                    new DebugContext(nameof(ContainerParser),
-                                                     Tokens: [new ArgumentOrCommandToken(rawValue)],
-                                                     TargetType: targetType,
-                                                     SelectedToken: rawValue,
-                                                     Summary: "materialized string value"));
-        }
-
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
-
-        if (targetType.IsEnum)
-        {
-            return EnumParser.CreateParsing(options, arguments, targetType, Enum.ToObject(targetType, 0));
-        }
-
-        if (targetType == typeof(bool))
-        {
-            return BooleanParser.CreateParsing(options, arguments, false);
-        }
-
-        if (targetType == typeof(byte))
-        {
-            return NumberParser.CreateParsing(options, arguments, (byte)0);
-        }
-
-        if (targetType == typeof(sbyte))
-        {
-            return NumberParser.CreateParsing(options, arguments, (sbyte)0);
-        }
-
-        if (targetType == typeof(ushort))
-        {
-            return NumberParser.CreateParsing(options, arguments, (ushort)0);
-        }
-
-        if (targetType == typeof(short))
-        {
-            return NumberParser.CreateParsing(options, arguments, (short)0);
-        }
-
-        if (targetType == typeof(uint))
-        {
-            return NumberParser.CreateParsing(options, arguments, 0u);
-        }
-
-        if (targetType == typeof(int))
-        {
-            return NumberParser.CreateParsing(options, arguments, 0);
-        }
-
-        if (targetType == typeof(ulong))
-        {
-            return NumberParser.CreateParsing(options, arguments, 0UL);
-        }
-
-        if (targetType == typeof(long))
-        {
-            return NumberParser.CreateParsing(options, arguments, 0L);
-        }
-
-        if (targetType == typeof(float))
-        {
-            return FloatParser.CreateParsing(options, arguments, 0f);
-        }
-
-        if (targetType == typeof(double))
-        {
-            return FloatParser.CreateParsing(options, arguments, 0d);
-        }
-
-        if (targetType == typeof(decimal))
-        {
-            return FloatParser.CreateParsing(options, arguments, decimal.Zero);
-        }
-
-        if (targetType == typeof(Guid))
-        {
-            return CommonParser.CreateParsing(options, arguments, Guid.Empty);
-        }
-
-        if (targetType == typeof(Uri))
-        {
-            return CommonParser.CreateParsing(options, arguments, new Uri("https://placeholder.invalid"));
-        }
-
-        if (targetType == typeof(DateTime))
-        {
-            return CommonParser.CreateParsing(options, arguments, default(DateTime));
-        }
-
-        if (targetType == typeof(DateTimeOffset))
-        {
-            return CommonParser.CreateParsing(options, arguments, default(DateTimeOffset));
-        }
-
-        if (targetType == typeof(DateOnly))
-        {
-            return CommonParser.CreateParsing(options, arguments, default(DateOnly));
-        }
-
-        if (targetType == typeof(TimeOnly))
-        {
-            return CommonParser.CreateParsing(options, arguments, default(TimeOnly));
-        }
-
-        return new GotError(new NotSupportedException(
-            $"Type '{targetType.FullName}' is not supported by {nameof(ContainerParser)}."));
+        return TypeProviderResolver.ParseValue(options, arguments, targetType, nameof(ContainerParser));
     }
 
     private static ParsingResult EmitContainerDebug(ParsingOptions options,
@@ -544,8 +424,8 @@ public class ContainerParser
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum container construction uses runtime generic instantiation for enum element types.")]
-    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum container construction uses runtime generic instantiation for enum element types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Container construction uses runtime generic instantiation for parsed element types.")]
+    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Container construction uses runtime generic instantiation for parsed element types.")]
     private static ParsingResult BuildSequenceContainerForRuntimeType(
         Type genericDefinition,
         Type valueType,
@@ -680,16 +560,11 @@ public class ContainerParser
             return BuildDictionaryContainer<TKey, TimeOnly>(genericDefinition, entries);
         }
 
-        if (valueType.IsEnum)
-        {
-            return BuildDictionaryContainerForRuntimeValueType<TKey>(genericDefinition, valueType, entries);
-        }
-
-        return CreateUnsupportedContainerResult(genericDefinition);
+        return BuildDictionaryContainerForRuntimeValueType<TKey>(genericDefinition, valueType, entries);
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum dictionary construction uses runtime generic instantiation for enum key types.")]
-    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum dictionary construction uses runtime generic instantiation for enum key types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Dictionary construction uses runtime generic instantiation for parsed key types.")]
+    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Dictionary construction uses runtime generic instantiation for parsed key types.")]
     private static ParsingResult BuildDictionaryContainerForRuntimeKeyType(
         Type genericDefinition,
         Type keyType,
@@ -708,8 +583,8 @@ public class ContainerParser
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Enum dictionary construction uses runtime generic instantiation for enum value types.")]
-    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Enum dictionary construction uses runtime generic instantiation for enum value types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Dictionary construction uses runtime generic instantiation for parsed value types.")]
+    [UnconditionalSuppressMessage("Aot", "IL3050", Justification = "Dictionary construction uses runtime generic instantiation for parsed value types.")]
     private static ParsingResult BuildDictionaryContainerForRuntimeValueType<TKey>(
         Type genericDefinition,
         Type valueType,
