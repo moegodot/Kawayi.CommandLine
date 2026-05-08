@@ -39,6 +39,7 @@ public sealed class ResponseFileReplacer : IResponseFileReplacer
         foreach (var token in tokens)
         {
             if (token is ArgumentOrCommandToken argumentOrCommandToken &&
+                token is not ArgumentToken &&
                 argumentOrCommandToken.Value.StartsWith('@'))
             {
                 var lines = File.ReadAllLines(argumentOrCommandToken.Value[1..]);

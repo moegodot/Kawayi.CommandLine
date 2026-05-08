@@ -90,7 +90,7 @@ public sealed class CommonParser
               initialState,
               "DateTime at DateTimeStyles.None",
               static (string value, out DateTime result) =>
-                  DateTime.TryParse(value, null, DateTimeStyles.None, out result));
+                  DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
 
     /// <summary>
     /// Parses a <see cref="DateTimeOffset"/> value from the supplied tokens.
@@ -105,7 +105,7 @@ public sealed class CommonParser
               initialState,
               "DateTimeOffset at DateTimeStyles.None",
               static (string value, out DateTimeOffset result) =>
-                  DateTimeOffset.TryParse(value, null, DateTimeStyles.None, out result));
+                  DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
 
     /// <summary>
     /// Parses a <see cref="DateOnly"/> value from the supplied tokens.
@@ -120,7 +120,7 @@ public sealed class CommonParser
               initialState,
               "DateOnly at DateTimeStyles.None",
               static (string value, out DateOnly result) =>
-                  DateOnly.TryParse(value, null, DateTimeStyles.None, out result));
+                  DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
 
     /// <summary>
     /// Parses a <see cref="TimeOnly"/> value from the supplied tokens.
@@ -135,7 +135,7 @@ public sealed class CommonParser
               initialState,
               "TimeOnly at DateTimeStyles.None",
               static (string value, out TimeOnly result) =>
-                  TimeOnly.TryParse(value, null, DateTimeStyles.None, out result));
+                  TimeOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result));
 
     private delegate bool TryParseDelegate<T>(string value, out T result);
 

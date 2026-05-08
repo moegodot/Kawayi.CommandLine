@@ -6,6 +6,7 @@
     <ProjectReference Include="..\Kawayi.CommandLine.Abstractions\Kawayi.CommandLine.Abstractions.csproj" />
     <ProjectReference Include="..\Kawayi.CommandLine.Core\Kawayi.CommandLine.Core.csproj" />
     <ProjectReference Include="..\Kawayi.CommandLine.Extensions\Kawayi.CommandLine.Extensions.csproj" />
-    <ProjectReference Include="..\Kawayi.CommandLine.Generator\Kawayi.CommandLine.Generator.csproj" />
+    <ProjectReference Include="..\Kawayi.CommandLine.Generator\Kawayi.CommandLine.Generator.csproj"
+                      OutputItemType="Analyzer" />
   </ItemGroup>
 </Project>

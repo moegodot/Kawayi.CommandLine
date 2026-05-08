@@ -228,6 +228,12 @@ NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.Comma
 NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.CommandLine.Sample.csproj -- payload --format json @sample-response.txt
 ```
 
+`--` 之后的 `@sample-response.txt` 会作为转发参数保留，不再展开为响应文件：
+
+```bash
+NO_COLOR=1 dotnet run --project ./samples/Kawayi.CommandLine.Sample/Kawayi.CommandLine.Sample.csproj -- payload --format json -- @sample-response.txt
+```
+
 其中 `sample-response.txt` 按行保存 token，例如：
 
 ```text

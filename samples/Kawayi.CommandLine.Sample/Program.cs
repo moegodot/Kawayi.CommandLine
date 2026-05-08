@@ -16,6 +16,7 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- '\-serve' --format json
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json -- --child -x
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json @sample-response.txt
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json -- @sample-response.txt
 // sample-response.txt stores one token per line, for example:
 // --secret-token
 // hush

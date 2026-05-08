@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Globalization;
 using Kawayi.CommandLine.Core.Primitives;
 using Kawayi.CommandLine.Abstractions;
 
@@ -889,57 +890,57 @@ public sealed class CliSchemaParser
 
         if (effectiveType == typeof(byte))
         {
-            return byte.TryParse(value, integerStyles, null, out _);
+            return byte.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(sbyte))
         {
-            return sbyte.TryParse(value, integerStyles, null, out _);
+            return sbyte.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(ushort))
         {
-            return ushort.TryParse(value, integerStyles, null, out _);
+            return ushort.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(short))
         {
-            return short.TryParse(value, integerStyles, null, out _);
+            return short.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(uint))
         {
-            return uint.TryParse(value, integerStyles, null, out _);
+            return uint.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(int))
         {
-            return int.TryParse(value, integerStyles, null, out _);
+            return int.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(ulong))
         {
-            return ulong.TryParse(value, integerStyles, null, out _);
+            return ulong.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(long))
         {
-            return long.TryParse(value, integerStyles, null, out _);
+            return long.TryParse(value, integerStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(float))
         {
-            return float.TryParse(value, floatStyles, null, out _);
+            return float.TryParse(value, floatStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(double))
         {
-            return double.TryParse(value, floatStyles, null, out _);
+            return double.TryParse(value, floatStyles, CultureInfo.InvariantCulture, out _);
         }
 
         if (effectiveType == typeof(decimal))
         {
-            return decimal.TryParse(value, floatStyles, null, out _);
+            return decimal.TryParse(value, floatStyles, CultureInfo.InvariantCulture, out _);
         }
 
         return false;

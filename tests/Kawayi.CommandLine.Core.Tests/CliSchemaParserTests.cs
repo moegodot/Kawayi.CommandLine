@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
 
 namespace Kawayi.CommandLine.Core.Tests;
@@ -347,6 +348,34 @@ public sealed class CliSchemaParserTests
 
         await Assert.That(command.Arguments[count]).IsEqualTo(-1);
         await Assert.That(command.Properties[threshold]).IsEqualTo(-1.5m);
+    }
+
+    [Test]
+    public async Task CreateParsing_Consumes_DashPrefixed_Decimal_Values_Using_Invariant_Culture()
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+        var previousUiCulture = CultureInfo.CurrentUICulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
+            var threshold = CreateProperty("threshold", typeof(decimal));
+            var schema = CreateBuilder(properties: [threshold]).Build();
+
+            var result = CliSchemaParser.CreateParsing(
+                CreateOptions(),
+                [new LongOptionToken("threshold"), new ShortOptionToken("1", ".5")],
+                schema);
+            var command = AssertFinished(result);
+
+            await Assert.That(command.Properties[threshold]).IsEqualTo(-1.5m);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+            CultureInfo.CurrentUICulture = previousUiCulture;
+        }
     }
 
     [Test]

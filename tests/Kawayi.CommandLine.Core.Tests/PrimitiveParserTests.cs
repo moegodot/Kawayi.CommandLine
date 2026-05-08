@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Globalization;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core.Primitives;
 
@@ -131,6 +132,34 @@ public sealed class PrimitiveParserTests
         var result = FloatParser.CreateParsing(DefaultOptions, arguments, decimal.Zero);
 
         await AssertInvalidArgument(result, "not-a-number", "decimal at NumberStyles.Float");
+    }
+
+    [Test]
+    public async Task Numeric_And_Date_Parsers_Use_Invariant_Culture()
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+        var previousUiCulture = CultureInfo.CurrentUICulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
+
+            await AssertParsingFinished(
+                FloatParser.CreateParsing(DefaultOptions, [new ArgumentOrCommandToken("3.5")], decimal.Zero),
+                3.5m);
+            await AssertParsingFinished(
+                CommonParser.CreateParsing(DefaultOptions, [new ArgumentOrCommandToken("2026-05-08")], default(DateOnly)),
+                new DateOnly(2026, 5, 8));
+            await AssertParsingFinished(
+                CommonParser.CreateParsing(DefaultOptions, [new ArgumentOrCommandToken("12:34:56")], default(TimeOnly)),
+                new TimeOnly(12, 34, 56));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+            CultureInfo.CurrentUICulture = previousUiCulture;
+        }
     }
 
     [Test]

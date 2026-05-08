@@ -86,6 +86,33 @@ public class ResponseFileReplacerTests
     }
 
     [Test]
+    public async Task Replace_ArgumentTokens_AfterOptionTerminator_AreNotExpanded()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{nameof(ResponseFileReplacerTests)}-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllLines(path, ["--secret-token", "hush"]);
+
+            ImmutableArray<Token> input =
+            [
+                new OptionTerminatorToken(),
+                new ArgumentToken($"@{path}")
+            ];
+
+            var replacer = new ResponseFileReplacer(new Tokenizer());
+
+            var result = replacer.Replace(input);
+
+            await AssertTokenSequence(result, input);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
     public async Task Replace_MissingResponseFile_ThrowsFileNotFoundException()
     {
         var path = Path.Combine(Path.GetTempPath(), $"{nameof(ResponseFileReplacerTests)}-{Guid.NewGuid():N}.txt");

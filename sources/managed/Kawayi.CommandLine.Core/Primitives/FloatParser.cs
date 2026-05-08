@@ -34,7 +34,7 @@ public sealed class FloatParser : Abstractions.IParsable<float>,
               initialState,
               "float at NumberStyles.Float",
               static (string value, out float result) =>
-                  float.TryParse(value, DefaultNumberStyles, null, out result));
+                  float.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="double"/> value from the supplied tokens.
@@ -49,7 +49,7 @@ public sealed class FloatParser : Abstractions.IParsable<float>,
               initialState,
               "double at NumberStyles.Float",
               static (string value, out double result) =>
-                  double.TryParse(value, DefaultNumberStyles, null, out result));
+                  double.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="decimal"/> value from the supplied tokens.
@@ -64,7 +64,7 @@ public sealed class FloatParser : Abstractions.IParsable<float>,
               initialState,
               "decimal at NumberStyles.Float",
               static (string value, out decimal result) =>
-                  decimal.TryParse(value, DefaultNumberStyles, null, out result));
+                  decimal.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     private delegate bool TryParseDelegate<T>(string value, out T result);
 

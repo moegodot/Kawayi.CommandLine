@@ -42,7 +42,7 @@ public sealed class NumberParser
               initialState,
               "byte at NumberStyles.Integer",
               static (string value, out byte result) =>
-                  byte.TryParse(value, DefaultNumberStyles, null, out result));
+                  byte.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses an <see cref="sbyte"/> value from the supplied tokens.
@@ -57,7 +57,7 @@ public sealed class NumberParser
               initialState,
               "sbyte at NumberStyles.Integer",
               static (string value, out sbyte result) =>
-                  sbyte.TryParse(value, DefaultNumberStyles, null, out result));
+                  sbyte.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="ushort"/> value from the supplied tokens.
@@ -72,7 +72,7 @@ public sealed class NumberParser
               initialState,
               "ushort at NumberStyles.Integer",
               static (string value, out ushort result) =>
-                  ushort.TryParse(value, DefaultNumberStyles, null, out result));
+                  ushort.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="short"/> value from the supplied tokens.
@@ -87,7 +87,7 @@ public sealed class NumberParser
               initialState,
               "short at NumberStyles.Integer",
               static (string value, out short result) =>
-                  short.TryParse(value, DefaultNumberStyles, null, out result));
+                  short.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses an <see cref="int"/> value from the supplied tokens.
@@ -102,7 +102,7 @@ public sealed class NumberParser
               initialState,
               "int at NumberStyles.Integer",
               static (string value, out int result) =>
-                  int.TryParse(value, DefaultNumberStyles, null, out result));
+                  int.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="uint"/> value from the supplied tokens.
@@ -117,7 +117,7 @@ public sealed class NumberParser
               initialState,
               "uint at NumberStyles.Integer",
               static (string value, out uint result) =>
-                  uint.TryParse(value, DefaultNumberStyles, null, out result));
+                  uint.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="long"/> value from the supplied tokens.
@@ -132,7 +132,7 @@ public sealed class NumberParser
               initialState,
               "long at NumberStyles.Integer",
               static (string value, out long result) =>
-                  long.TryParse(value, DefaultNumberStyles, null, out result));
+                  long.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     /// <summary>
     /// Parses a <see cref="ulong"/> value from the supplied tokens.
@@ -147,7 +147,7 @@ public sealed class NumberParser
               initialState,
               "ulong at NumberStyles.Integer",
               static (string value, out ulong result) =>
-                  ulong.TryParse(value, DefaultNumberStyles, null, out result));
+                  ulong.TryParse(value, DefaultNumberStyles, CultureInfo.InvariantCulture, out result));
 
     private delegate bool TryParseDelegate<T>(string value, out T result);
 
