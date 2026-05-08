@@ -11,6 +11,7 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch error --interval 5
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --verbose serve localhost watch --interval 5 changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --trace-id-prefix demo --color-output true
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --start-date 20260508 --start-time 091011
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload hidden-profile extra-a extra-b --format xml --verbose true --retries 4 --tag alpha --tag beta --env region=cn --env tier=prod serve localhost --daemon false watch --interval 5 --once true --sink stdout changes
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json serve localhost watch --interval 5 -k-L/bin/foo.a
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- '\-serve' --format json
@@ -62,7 +63,7 @@ internal static class Program
         "workspace-demo",
         new Document(
             "Attribute-first command line showcase",
-            "Demonstrates attribute-driven command metadata plus post-generation schema augmentation."),
+            "Demonstrates attribute-driven command metadata and generated immutable parsing schemas."),
         new Version(1, 0, 0),
         "https://github.com/moegodot/");
 
@@ -80,13 +81,8 @@ internal static class Program
         var rawTokens = tokenizer.Tokenize([.. effectiveArguments]);
         var tokens = new ResponseFileReplacer(tokenizer).Replace(rawTokens);
 
-        var builder = WorkspaceCommand.ExportParsing(parsingOptions);
-        AugmentGeneratedBuilder(builder);
-
-        var effectiveBuilder = ShouldUseRelaxedSubcommandHelpRoute(tokens)
-            ? CloneForScopedHelp(builder)
-            : builder;
-        var result = effectiveBuilder.Build().Parse(tokens, parsingOptions);
+        var schema = WorkspaceCommand.ExportSchema(parsingOptions);
+        var result = schema.Parse(tokens, parsingOptions);
         return HandleResult(result);
     }
 
@@ -114,132 +110,15 @@ internal static class Program
     private static void PrintOverview<T>(TextWriter output, ParsingOptions options)
         where T : IDocumentExporter, ISymbolExporter, ICliSchemaExporter
     {
-        var parserSurface = T.ExportParsing(options);
-        var warmupResult = parserSurface.Build().Parse([new LongOptionToken("help")], options);
+        var schema = T.ExportSchema(options);
+        var warmupResult = schema.Parse([new LongOptionToken("help")], options);
 
         output.WriteLine("Kawayi.CommandLine Attribute Max Demo");
         output.WriteLine($"Documents: {T.Documents.Count}");
         output.WriteLine($"Symbols: {T.Symbols.Length}");
-        output.WriteLine($"Root surface: {parserSurface.Argument.Count} arguments, {parserSurface.Properties.Count} options, {parserSurface.SubcommandDefinitions.Count} subcommands");
+        output.WriteLine($"Root surface: {schema.Argument.Count} arguments, {schema.Properties.Values.Distinct().Count()} options, {schema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
         output.WriteLine($"Warm-up via CliSchema.Parse(...): {warmupResult.GetType().Name}");
         output.WriteLine();
-    }
-
-    private static void AugmentGeneratedBuilder(CliSchemaBuilder rootBuilder)
-    {
-        rootBuilder.Properties["format"] = rootBuilder.Properties["format"] with
-        {
-            PossibleValues = new CountablePossibleValues<string>(["json", "yaml", "toml"])
-        };
-
-        rootBuilder.Properties["retries"] = rootBuilder.Properties["retries"] with
-        {
-            DefaultValueFactory = static () => 3,
-            Validation = static value => (int)value < 0 ? "retries must be zero or greater." : null
-        };
-
-        rootBuilder.Properties["env"] = rootBuilder.Properties["env"] with
-        {
-            DefaultValueFactory = static () => ImmutableDictionary<string, string>.Empty
-        };
-
-        rootBuilder.Properties["trace-id-prefix"] = rootBuilder.Properties["trace-id-prefix"] with
-        {
-            DefaultValueFactory = static () => "workspace"
-        };
-
-        rootBuilder.Properties["workspace-name"] = rootBuilder.Properties["workspace-name"] with
-        {
-            DefaultValueFactory = static () => "default-workspace"
-        };
-
-        var serveBuilder = GetRequiredSubcommandBuilder(rootBuilder, "serve");
-        serveBuilder.Properties["port"] = serveBuilder.Properties["port"] with
-        {
-            DefaultValueFactory = static () => 8080,
-            Validation = static value => (int)value is < 1 or > 65535 ? "port must be between 1 and 65535." : null
-        };
-
-        var watchBuilder = GetRequiredSubcommandBuilder(serveBuilder, "watch");
-        watchBuilder.Properties["interval"] = watchBuilder.Properties["interval"] with
-        {
-            Validation = static value => (int)value <= 0 ? "interval must be greater than zero." : null
-        };
-        watchBuilder.Properties["sink"] = watchBuilder.Properties["sink"] with
-        {
-            PossibleValues = new DescribablePossibleValues("stdout, file or any custom sink plugin")
-        };
-    }
-
-    private static CliSchemaBuilder GetRequiredSubcommandBuilder(CliSchemaBuilder builder, string key)
-    {
-        if (builder.Subcommands.TryGetValue(key, out var childBuilder) && childBuilder is not null)
-        {
-            return childBuilder;
-        }
-
-        throw new InvalidOperationException($"Expected subcommand builder '{key}' to exist.");
-    }
-
-    private static bool ShouldUseRelaxedSubcommandHelpRoute(ImmutableArray<Token> tokens)
-    {
-        if (tokens.Length < 2 || !IsHelpToken(tokens[^1]))
-        {
-            return false;
-        }
-
-        return tokens[..^1].All(static token => token is ArgumentOrCommandToken);
-    }
-
-    private static bool IsHelpToken(Token token)
-    {
-        return token switch
-        {
-            LongOptionToken { Value: "help" } => true,
-            ShortOptionToken { Value: "h" } => true,
-            ArgumentOrCommandToken { Value: "help" } => true,
-            _ => false
-        };
-    }
-
-    private static CliSchemaBuilder CloneForScopedHelp(CliSchemaBuilder source)
-    {
-        var clone = new CliSchemaBuilder(
-            ImmutableDictionary.CreateBuilder<string, CommandDefinition>(),
-            ImmutableDictionary.CreateBuilder<string, CliSchemaBuilder>(),
-            ImmutableDictionary.CreateBuilder<string, PropertyDefinition>(),
-            ImmutableList.CreateBuilder<ParameterDefinition>());
-
-        foreach (var (key, definition) in source.SubcommandDefinitions)
-        {
-            clone.SubcommandDefinitions[key] = definition;
-        }
-
-        foreach (var (key, property) in source.Properties)
-        {
-            clone.Properties[key] = property with
-            {
-                Requirement = false,
-                RequirementIfNull = false
-            };
-        }
-
-        foreach (var argument in source.Argument)
-        {
-            clone.Argument.Add(argument with
-            {
-                ValueRange = new ValueRange(0, argument.ValueRange.Maximum),
-                Requirement = false,
-                RequirementIfNull = false
-            });
-        }
-
-        foreach (var (key, childBuilder) in source.Subcommands)
-        {
-            clone.Subcommands[key] = CloneForScopedHelp(childBuilder);
-        }
-
-        return clone;
     }
 
     private static int HandleResult(ParsingResult result)
@@ -557,9 +436,9 @@ public partial class WorkspaceCommand
     /// Start date
     /// </summary>
     /// <remarks>
-    /// Demonstrates DateOnly parsing.
+    /// Demonstrates DateOnly parsing with an exact yyyyMMdd format.
     /// </remarks>
-    [Property]
+    [Property(format: "yyyyMMdd")]
     [LongAlias("start-date")]
     public DateOnly StartDate { get; set; }
 
@@ -567,9 +446,9 @@ public partial class WorkspaceCommand
     /// Start time
     /// </summary>
     /// <remarks>
-    /// Demonstrates TimeOnly parsing.
+    /// Demonstrates TimeOnly parsing with an exact HHmmss format.
     /// </remarks>
-    [Property]
+    [Property(format: "HHmmss")]
     [LongAlias("start-time")]
     public TimeOnly StartTime { get; set; }
 

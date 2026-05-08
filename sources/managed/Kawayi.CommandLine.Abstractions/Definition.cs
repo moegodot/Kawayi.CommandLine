@@ -43,6 +43,11 @@ public abstract record TypedDefinition(
     /// return null if the value is valid, or return the error message.
     /// </summary>
     public Func<object, string?>? Validation { get; init; }
+
+    /// <summary>
+    /// Gets the optional format hint used by parsers for this definition.
+    /// </summary>
+    public string? Format { get; init; }
 }
 
 /// <summary>

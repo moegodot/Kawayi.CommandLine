@@ -18,6 +18,7 @@ public class ExportSymbolsGeneratorTests
     public async Task Generates_Argument_Property_And_Subcommand_Symbols()
     {
         const string source = """
+            using System;
             using System.Collections.Immutable;
             using Kawayi.CommandLine.Abstractions;
             using Kawayi.CommandLine.Core.Attributes;
@@ -132,6 +133,7 @@ public class ExportSymbolsGeneratorTests
     public async Task Generated_Symbol_Names_Are_Kebab_Case_While_Document_Keys_Stay_Csharp_Names()
     {
         const string source = """
+            using System;
             using System.Collections.Immutable;
             using Kawayi.CommandLine.Abstractions;
             using Kawayi.CommandLine.Core.Attributes;
@@ -262,6 +264,43 @@ public class ExportSymbolsGeneratorTests
         await Assert.That(property.Requirement).IsFalse();
         await Assert.That(property.RequirementIfNull).IsTrue();
         await Assert.That(diagnostics.Any(static item => item.Id == "KCLG112")).IsFalse();
+    }
+
+    [Test]
+    public async Task Format_Is_Exported_For_Arguments_And_Properties()
+    {
+        const string source = """
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Date", new Document("Date summary", "Date help"))
+                        .Add("Time", new Document("Time summary", "Time help"));
+
+                [Argument(0, format: "yyyyMMdd")]
+                [ValueRange(1, 1)]
+                public System.DateOnly Date { get; set; }
+
+                [Property(format: "HHmmss")]
+                [LongAlias("time")]
+                public System.TimeOnly Time { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var symbols = GetSymbols(result, "Fixtures.Command");
+        var argument = symbols.OfType<ParameterDefinition>().Single();
+        var property = symbols.OfType<PropertyDefinition>().Single();
+
+        await Assert.That(argument.Format).IsEqualTo("yyyyMMdd");
+        await Assert.That(property.Format).IsEqualTo("HHmmss");
     }
 
     [Test]

@@ -18,13 +18,20 @@ public sealed class PropertyAttribute : SymbolAttribute
     /// <param name="visible">Whether the property should be visible in help output.</param>
     /// <param name="valueName">The metavar name shown for option values.</param>
     /// <param name="requirementIfNull">Whether the property is required when its effective value is null.</param>
-    public PropertyAttribute(bool require = false, bool visible = true, string? valueName = null, bool requirementIfNull = false) : base(require, visible, requirementIfNull)
+    /// <param name="format">The optional format hint used during parsing.</param>
+    public PropertyAttribute(bool require = false, bool visible = true, string? valueName = null, bool requirementIfNull = false, string? format = null) : base(require, visible, requirementIfNull)
     {
         ValueName = valueName;
+        Format = format;
     }
 
     /// <summary>
     /// Gets the metavar name shown for option values.
     /// </summary>
     public string? ValueName { get; }
+
+    /// <summary>
+    /// Gets the optional format hint used for parsing values.
+    /// </summary>
+    public string? Format { get; }
 }

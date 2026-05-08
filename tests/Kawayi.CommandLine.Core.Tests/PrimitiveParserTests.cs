@@ -230,6 +230,36 @@ public sealed class PrimitiveParserTests
     }
 
     [Test]
+    public async Task CommonParser_Parses_Date_And_Time_Types_With_Exact_Formats()
+    {
+        var dateTimeResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("20260508-091011")],
+            default(DateTime),
+            "yyyyMMdd-HHmmss");
+        var dateTimeOffsetResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("20260508-091011+00:00")],
+            default(DateTimeOffset),
+            "yyyyMMdd-HHmmsszzz");
+        var dateOnlyResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("20260508")],
+            default(DateOnly),
+            "yyyyMMdd");
+        var timeOnlyResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("091011")],
+            default(TimeOnly),
+            "HHmmss");
+
+        await AssertParsingFinished(dateTimeResult, new DateTime(2026, 5, 8, 9, 10, 11));
+        await AssertParsingFinished(dateTimeOffsetResult, new DateTimeOffset(2026, 5, 8, 9, 10, 11, TimeSpan.Zero));
+        await AssertParsingFinished(dateOnlyResult, new DateOnly(2026, 5, 8));
+        await AssertParsingFinished(timeOnlyResult, new TimeOnly(9, 10, 11));
+    }
+
+    [Test]
     [Arguments("not-a-guid", "Guid")]
     [Arguments("http://[", "Uri at UriKind.RelativeOrAbsolute")]
     [Arguments("2026-99-99", "DateTime at DateTimeStyles.None")]
@@ -252,6 +282,36 @@ public sealed class PrimitiveParserTests
         };
 
         await AssertInvalidArgument(result, rawValue, expectedDescription);
+    }
+
+    [Test]
+    public async Task CommonParser_Returns_InvalidArgument_For_Mismatched_Exact_Formats()
+    {
+        var dateTimeResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("2026-05-08T09:10:11")],
+            default(DateTime),
+            "yyyyMMdd-HHmmss");
+        var dateTimeOffsetResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("2026-05-08T09:10:11+00:00")],
+            default(DateTimeOffset),
+            "yyyyMMdd-HHmmsszzz");
+        var dateOnlyResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("2026-05-08")],
+            default(DateOnly),
+            "yyyyMMdd");
+        var timeOnlyResult = CommonParser.CreateParsing(
+            DefaultOptions,
+            [new ArgumentOrCommandToken("09:10:11")],
+            default(TimeOnly),
+            "HHmmss");
+
+        await AssertInvalidArgument(dateTimeResult, "2026-05-08T09:10:11", "DateTime at exact format 'yyyyMMdd-HHmmss'");
+        await AssertInvalidArgument(dateTimeOffsetResult, "2026-05-08T09:10:11+00:00", "DateTimeOffset at exact format 'yyyyMMdd-HHmmsszzz'");
+        await AssertInvalidArgument(dateOnlyResult, "2026-05-08", "DateOnly at exact format 'yyyyMMdd'");
+        await AssertInvalidArgument(timeOnlyResult, "09:10:11", "TimeOnly at exact format 'HHmmss'");
     }
 
     [Test]

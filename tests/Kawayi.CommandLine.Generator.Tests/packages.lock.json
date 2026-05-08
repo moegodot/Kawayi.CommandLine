@@ -293,12 +293,14 @@
           "Kawayi.Escapes": "[1.0.0, )"
         }
       },
-      "kawayi.commandline.generator": {
+      "kawayi.commandline.extensions": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.CodeAnalysis.CSharp": "[5.0.0, )",
-          "Microsoft.CodeAnalysis.Common": "[5.0.0, )"
+          "Kawayi.CommandLine.Core": "[1.0.0, )"
         }
+      },
+      "kawayi.commandline.generator": {
+        "type": "Project"
       },
       "kawayi.escapes": {
         "type": "Project"

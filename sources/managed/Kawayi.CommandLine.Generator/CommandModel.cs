@@ -209,6 +209,7 @@ internal sealed class CommandModel
                     valueRangeMinimum: GetAttributeInt(valueRangeAttribute, 0, 0),
                     valueRangeMaximum: GetAttributeInt(valueRangeAttribute, 1, 0),
                     valueName: null,
+                    format: GetAttributeNullableString(argumentAttribute, 4),
                     longAliases: [],
                     shortAliases: [],
                     aliases: [],
@@ -265,6 +266,7 @@ internal sealed class CommandModel
                     valueRangeMinimum: valueRangeAttribute is null ? null : GetAttributeInt(valueRangeAttribute, 0, 0),
                     valueRangeMaximum: valueRangeAttribute is null ? null : GetAttributeInt(valueRangeAttribute, 1, 0),
                     valueName: GetAttributeNullableString(propertyAttribute, 2),
+                    format: GetAttributeNullableString(propertyAttribute, 4),
                     longAliases: modelLongAliases,
                     shortAliases: modelShortAliases,
                     aliases: [],
@@ -315,6 +317,7 @@ internal sealed class CommandModel
                 valueRangeMinimum: null,
                 valueRangeMaximum: null,
                 valueName: null,
+                format: null,
                 longAliases: [],
                 shortAliases: [],
                 aliases: aliases,
@@ -722,6 +725,7 @@ internal sealed class MemberModel
         int? valueRangeMinimum,
         int? valueRangeMaximum,
         string? valueName,
+        string? format,
         ImmutableArray<AliasModel> longAliases,
         ImmutableArray<AliasModel> shortAliases,
         ImmutableArray<AliasModel> aliases,
@@ -746,6 +750,7 @@ internal sealed class MemberModel
         ValueRangeMinimum = valueRangeMinimum;
         ValueRangeMaximum = valueRangeMaximum;
         ValueName = valueName;
+        Format = format;
         LongAliases = longAliases;
         ShortAliases = shortAliases;
         Aliases = aliases;
@@ -787,6 +792,8 @@ internal sealed class MemberModel
     public int? ValueRangeMaximum { get; }
 
     public string? ValueName { get; }
+
+    public string? Format { get; }
 
     public ImmutableArray<AliasModel> LongAliases { get; }
 

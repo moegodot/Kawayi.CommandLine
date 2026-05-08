@@ -38,10 +38,12 @@ public class ContainerParser
     /// <param name="options">The parsing options for this operation.</param>
     /// <param name="arguments">The tokens to parse.</param>
     /// <param name="initialState">The container type descriptor to populate.</param>
+    /// <param name="format">The optional format hint used for element parsing.</param>
     /// <returns>The parsing result.</returns>
     public static ParsingResult CreateParsing(ParsingOptions options,
                                               ImmutableArray<Token> arguments,
-                                              ContainerType initialState)
+                                              ContainerType initialState,
+                                              string? format = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(initialState);
@@ -59,8 +61,8 @@ public class ContainerParser
         var genericDefinition = initialState.Container.GetGenericTypeDefinition();
 
         var result = IsDictionaryContainer(genericDefinition)
-            ? CreateDictionaryParsing(options, arguments, initialState, genericDefinition)
-            : CreateSequenceParsing(options, arguments, initialState, genericDefinition);
+            ? CreateDictionaryParsing(options, arguments, initialState, genericDefinition, format)
+            : CreateSequenceParsing(options, arguments, initialState, genericDefinition, format);
 
         return EmitContainerDebug(options, result, arguments, initialState);
     }
@@ -68,13 +70,14 @@ public class ContainerParser
     private static ParsingResult CreateSequenceParsing(ParsingOptions options,
                                                        ImmutableArray<Token> arguments,
                                                        ContainerType containerType,
-                                                       Type genericDefinition)
+                                                       Type genericDefinition,
+                                                       string? format)
     {
         var parsedValues = new object?[arguments.Length];
 
         for (var index = 0; index < arguments.Length; index++)
         {
-            var result = ParseValue(options, arguments[index].Value, containerType.ValueType);
+            var result = ParseValue(options, arguments[index].Value, containerType.ValueType, format);
 
             if (result is not ParsingFinished finished)
             {
@@ -90,7 +93,8 @@ public class ContainerParser
     private static ParsingResult CreateDictionaryParsing(ParsingOptions options,
                                                          ImmutableArray<Token> arguments,
                                                          ContainerType containerType,
-                                                         Type genericDefinition)
+                                                         Type genericDefinition,
+                                                         string? format)
     {
         if (containerType.KeyType is null)
         {
@@ -111,7 +115,8 @@ public class ContainerParser
 
             var keyResult = ParseValue(options,
                                        DefaultDictionaryEscapeRule.Unescape(rawKey),
-                                       containerType.KeyType);
+                                       containerType.KeyType,
+                                       format);
 
             if (keyResult is not ParsingFinished parsedKey)
             {
@@ -120,7 +125,8 @@ public class ContainerParser
 
             var valueResult = ParseValue(options,
                                          DefaultDictionaryEscapeRule.Unescape(rawValue),
-                                         containerType.ValueType);
+                                         containerType.ValueType,
+                                         format);
 
             if (valueResult is not ParsingFinished parsedValue)
             {
@@ -343,10 +349,11 @@ public class ContainerParser
 
     private static ParsingResult ParseValue(ParsingOptions options,
                                             string rawValue,
-                                            Type targetType)
+                                            Type targetType,
+                                            string? format)
     {
         ImmutableArray<Token> arguments = [new ArgumentOrCommandToken(rawValue)];
-        return TypeProviderResolver.ParseValue(options, arguments, targetType, nameof(ContainerParser));
+        return TypeProviderResolver.ParseValue(options, arguments, targetType, format, nameof(ContainerParser));
     }
 
     private static ParsingResult EmitContainerDebug(ParsingOptions options,

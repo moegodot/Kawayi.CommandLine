@@ -283,7 +283,7 @@ public sealed class CliSchemaParser
             }
 
             var activeTokens = positionalTokens[tokenIndex..(tokenIndex + count)];
-            var parseResult = ParseTypedValue(options, activeTokens, definition.Type);
+            var parseResult = ParseTypedValue(options, activeTokens, definition.Type, definition.Format);
 
             if (parseResult is not ParsingFinished parsed)
             {
@@ -327,7 +327,7 @@ public sealed class CliSchemaParser
             }
 
             var activeTokens = tokens.ToImmutableArray();
-            var parseResult = ParseTypedValue(options, activeTokens, definition.Type);
+            var parseResult = ParseTypedValue(options, activeTokens, definition.Type, definition.Format);
 
             if (parseResult is not ParsingFinished parsed)
             {
@@ -482,9 +482,9 @@ public sealed class CliSchemaParser
         return index;
     }
 
-    private static ParsingResult ParseTypedValue(ParsingOptions options, ImmutableArray<Token> tokens, Type targetType)
+    private static ParsingResult ParseTypedValue(ParsingOptions options, ImmutableArray<Token> tokens, Type targetType, string? format)
     {
-        return TypeProviderResolver.ParseValue(options, tokens, targetType, nameof(CliSchemaParser));
+        return TypeProviderResolver.ParseValue(options, tokens, targetType, format, nameof(CliSchemaParser));
     }
 
     private static bool TryCreateFlagResult(ParsingOptions options,

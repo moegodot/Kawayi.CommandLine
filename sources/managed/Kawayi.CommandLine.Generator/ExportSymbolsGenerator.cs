@@ -191,7 +191,13 @@ public sealed class ExportSymbolsGenerator : IIncrementalGenerator
     {
         var argumentExpression =
             $"new global::Kawayi.CommandLine.Abstractions.ParameterDefinition({GenerateDefinitionInformationExpression(member)}, null, new global::Kawayi.CommandLine.Abstractions.ValueRange({member.ValueRangeMinimum}, {member.ValueRangeMaximum}), typeof({member.TypeName}), {FormatBool(member.VisibleRequirement)}, {FormatBool(member.RequirementIfNull)})";
-        var initializers = new List<string>(1);
+        var initializers = new List<string>(2);
+
+        if (member.Format is not null)
+        {
+            initializers.Add($"Format = {SymbolDisplay.FormatLiteral(member.Format, true)}");
+        }
+
         AddValidationInitializer(initializers, member);
 
         return ApplyInitializers(argumentExpression, initializers);
@@ -201,11 +207,16 @@ public sealed class ExportSymbolsGenerator : IIncrementalGenerator
     {
         var propertyExpression =
             $"new global::Kawayi.CommandLine.Abstractions.PropertyDefinition({GenerateDefinitionInformationExpression(member)}, {GenerateAliasDictionaryExpression(member.LongAliases)}, {GenerateAliasDictionaryExpression(member.ShortAliases)}, null, typeof({member.TypeName}), {FormatBool(member.VisibleRequirement)}, {FormatBool(member.RequirementIfNull)})";
-        var initializers = new List<string>(4);
+        var initializers = new List<string>(5);
 
         if (member.ValueName is not null)
         {
             initializers.Add($"ValueName = {SymbolDisplay.FormatLiteral(member.ValueName, true)}");
+        }
+
+        if (member.Format is not null)
+        {
+            initializers.Add($"Format = {SymbolDisplay.FormatLiteral(member.Format, true)}");
         }
 
         if (member.ValueRangeMinimum is not null && member.ValueRangeMaximum is not null)

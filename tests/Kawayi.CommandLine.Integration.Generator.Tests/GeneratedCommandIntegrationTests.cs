@@ -18,12 +18,13 @@ public sealed class GeneratedCommandIntegrationTests
     {
         using var output = new StringWriter();
         var options = CreateOptions(output);
-        var builder = SchemaCommand.ExportParsing(options);
-        var schema = builder.Build();
+        var schema = SchemaCommand.ExportSchema(options);
 
         await Assert.That(typeof(ICliSchemaExporter).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
         await Assert.That(typeof(IBindable).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
         await Assert.That(typeof(SchemaCommand).GetMethod("CreateParsing", BindingFlags.Public | BindingFlags.Static)).IsNull();
+        await Assert.That(typeof(SchemaCommand).GetMethod("ExportSchema", BindingFlags.Public | BindingFlags.Static)).IsNotNull();
+        await Assert.That(typeof(SchemaCommand).GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)).IsNull();
         await Assert.That(SchemaCommand.Documents.Keys).Contains("Input");
         await Assert.That(SchemaCommand.Symbols.Length).IsGreaterThanOrEqualTo(6);
         await Assert.That(schema.GeneratedFrom).IsEqualTo(typeof(SchemaCommand));
@@ -72,10 +73,10 @@ public sealed class GeneratedCommandIntegrationTests
             "--mode", "advanced",
             "--id", guid.ToString(),
             "--endpoint", "https://example.com/api",
-            "--date-time-value", "2026-05-08T09:10:11",
-            "--date-time-offset-value", "2026-05-08T09:10:11+00:00",
-            "--date-only-value", "2026-05-08",
-            "--time-only-value", "09:10:11");
+            "--date-time-value", "20260508-091011",
+            "--date-time-offset-value", "20260508-091011+00:00",
+            "--date-only-value", "20260508",
+            "--time-only-value", "091011");
 
         await Assert.That(command.ByteValue).IsEqualTo((byte)1);
         await Assert.That(command.SByteValue).IsEqualTo((sbyte)-2);
@@ -218,43 +219,21 @@ public sealed class GeneratedCommandIntegrationTests
     }
 
     [Test]
-    public async Task Default_Value_Factory_Validation_And_Binding_Use_Effective_Values()
+    public async Task Binding_Preserves_Initializers_For_Absent_Optional_Members()
     {
-        var builder = EffectiveCommand.ExportParsing(CreateOptions());
-        builder.Properties["retries"] = builder.Properties["retries"] with
-        {
-            DefaultValueFactory = static () => 3
-        };
         var cli = AssertFinished(Parse<EffectiveCommand>());
-        var commandWithoutAugmentation = cli.Bind<EffectiveCommand>();
-        var augmentedCli = AssertFinished(builder.Build().Parse(Tokenize(), CreateOptions()));
-        var augmentedCommand = augmentedCli.Bind<EffectiveCommand>();
+        var command = cli.Bind<EffectiveCommand>();
 
-        await Assert.That(commandWithoutAugmentation.Retries).IsEqualTo(-1);
-        await Assert.That(commandWithoutAugmentation.OptionalInitialized).IsEqualTo(42);
-        await Assert.That(augmentedCommand.Retries).IsEqualTo(3);
-        await Assert.That(augmentedCommand.OptionalInitialized).IsEqualTo(42);
+        await Assert.That(command.Retries).IsEqualTo(-1);
+        await Assert.That(command.OptionalInitialized).IsEqualTo(42);
     }
 
     [Test]
-    public async Task Requirement_RequirementIfNull_And_Validators_Report_Errors()
+    public async Task Requirement_And_Validators_Report_Errors()
     {
-        var nullBuilder = NullRequirementCommand.ExportParsing(CreateOptions());
-        nullBuilder.Properties["token"] = nullBuilder.Properties["token"] with
-        {
-            DefaultValueFactory = static () => null!
-        };
-        var defaultValidationBuilder = ValidationCommand.ExportParsing(CreateOptions());
-        defaultValidationBuilder.Properties["positive"] = defaultValidationBuilder.Properties["positive"] with
-        {
-            DefaultValueFactory = static () => 0
-        };
-
         await Assert.That(Parse<RequiredCommand>()).IsTypeOf<InvalidArgumentDetected>();
-        await Assert.That(nullBuilder.Build().Parse(Tokenize(), CreateOptions())).IsTypeOf<InvalidArgumentDetected>();
         await Assert.That(Parse<ValidationCommand>("--positive", "0")).IsTypeOf<FailedValidation>();
         await Assert.That(Parse<ValidationCommand>("--throwing", "1")).IsTypeOf<FailedValidation>();
-        await Assert.That(defaultValidationBuilder.Build().Parse(Tokenize(), CreateOptions())).IsTypeOf<FailedValidation>();
     }
 
     [Test]
@@ -318,19 +297,19 @@ public sealed class GeneratedCommandIntegrationTests
     private static Cli ParseCli<TCommand>(ImmutableArray<Token> tokens)
         where TCommand : ICliSchemaExporter
     {
-        return AssertFinished(TCommand.ExportParsing(CreateOptions()).Build().Parse(tokens, CreateOptions()));
+        return AssertFinished(TCommand.ExportSchema(CreateOptions()).Parse(tokens, CreateOptions()));
     }
 
     private static ParsingResult Parse<TCommand>(params string[] arguments)
         where TCommand : ICliSchemaExporter
     {
-        return TCommand.ExportParsing(CreateOptions()).Build().Parse(Tokenize(arguments), CreateOptions());
+        return TCommand.ExportSchema(CreateOptions()).Parse(Tokenize(arguments), CreateOptions());
     }
 
     private static ParsingResult StartParse<TCommand>(ImmutableArray<Token> tokens)
         where TCommand : ICliSchemaExporter
     {
-        return CliSchemaParser.CreateParsing(CreateOptions(), tokens, TCommand.ExportParsing(CreateOptions()).Build());
+        return CliSchemaParser.CreateParsing(CreateOptions(), tokens, TCommand.ExportSchema(CreateOptions()));
     }
 
     private static ImmutableArray<Token> Tokenize(params string[] arguments)
@@ -537,22 +516,22 @@ public partial class TypeCoverageCommand
     public Uri Endpoint { get; set; } = new("https://example.invalid");
 
     /// <summary>DateTime value.</summary>
-    [CliProperty]
+    [CliProperty(format: "yyyyMMdd-HHmmss")]
     [LongAlias("date-time-value")]
     public DateTime DateTimeValue { get; set; }
 
     /// <summary>DateTimeOffset value.</summary>
-    [CliProperty]
+    [CliProperty(format: "yyyyMMdd-HHmmsszzz")]
     [LongAlias("date-time-offset-value")]
     public DateTimeOffset DateTimeOffsetValue { get; set; }
 
     /// <summary>DateOnly value.</summary>
-    [CliProperty]
+    [CliProperty(format: "yyyyMMdd")]
     [LongAlias("date-only-value")]
     public DateOnly DateOnlyValue { get; set; }
 
     /// <summary>TimeOnly value.</summary>
-    [CliProperty]
+    [CliProperty(format: "HHmmss")]
     [LongAlias("time-only-value")]
     public TimeOnly TimeOnlyValue { get; set; }
 }

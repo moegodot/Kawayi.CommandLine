@@ -7,6 +7,7 @@ using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
 using Kawayi.CommandLine.Core.Attributes;
+using Kawayi.CommandLine.Extensions;
 using Kawayi.CommandLine.Generator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -14,10 +15,10 @@ using CommandDocument = Kawayi.CommandLine.Abstractions.Document;
 
 namespace Kawayi.CommandLine.Generator.Tests;
 
-public class ExportParsingGeneratorTests
+public class ExportSchemaGeneratorTests
 {
     [Test]
-    public async Task Generates_CliSchemaExporter_And_Builds_CliSchemaBuilder_From_Symbols()
+    public async Task Generates_CliSchemaExporter_And_Exports_CliSchema_From_Symbols()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -55,14 +56,15 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
-        var snapshot = builder.Build();
+        var snapshot = GetCliSchema(result, "Fixtures.Command");
         var symbols = GetSymbols(result, "Fixtures.Command");
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
         await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "CreateParsing")).IsFalse();
+        await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "ExportSchema")).IsTrue();
+        await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "ExportParsing")).IsFalse();
         await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
         await Assert.That(snapshot.Argument[0].Information.Name.Value).IsEqualTo("input");
         await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("verbose-option"))).IsTrue();
@@ -72,7 +74,7 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
-    public async Task Generated_CliSchema_Parse_Composes_With_ExportParsing()
+    public async Task Generated_CliSchema_Parse_Composes_With_ExportSchema()
     {
         const string source = """
             using Kawayi.CommandLine.Core.Attributes;
@@ -162,8 +164,7 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
-        var snapshot = builder.Build();
+        var snapshot = GetCliSchema(result, "Fixtures.Command");
         var symbols = GetSymbols(result, "Fixtures.Command");
         var exportedSubcommand = symbols.OfType<CommandDefinition>().Single();
 
@@ -202,7 +203,7 @@ public class ExportParsingGeneratorTests
         var result = RunGenerator(source, "Fixtures.FooCommand");
         var targetType = result.Compilation.GetTypeByMetadataName("Fixtures.FooCommand")
             ?? throw new InvalidOperationException("Expected FooCommand to be available in the generated compilation.");
-        var snapshot = GetCliSchemaBuilder(result, "Fixtures.FooCommand").Build();
+        var snapshot = GetCliSchema(result, "Fixtures.FooCommand");
         var diagnostics = GetGeneratorDiagnostics(result);
 
         await Assert.That(targetType.BaseType?.ToDisplayString()).IsEqualTo("Fixtures.BarCommand");
@@ -293,8 +294,8 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.FooCommand");
-        var barSnapshot = GetCliSchemaBuilder(result, "Fixtures.BarCommand").Build();
-        var fooSnapshot = GetCliSchemaBuilder(result, "Fixtures.FooCommand").Build();
+        var barSnapshot = GetCliSchema(result, "Fixtures.BarCommand");
+        var fooSnapshot = GetCliSchema(result, "Fixtures.FooCommand");
         var parsingResult = GetGeneratedParsingResult(
             result,
             "Fixtures.FooCommand",
@@ -494,8 +495,7 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
-        var snapshot = builder.Build();
+        var snapshot = GetCliSchema(result, "Fixtures.Command");
         ImmutableArray<Token> arguments =
         [
             new ArgumentOrCommandToken("payload"),
@@ -545,8 +545,7 @@ public class ExportParsingGeneratorTests
             """;
 
         var result = RunGenerator(source, "Fixtures.Command");
-        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
-        var snapshot = builder.Build();
+        var snapshot = GetCliSchema(result, "Fixtures.Command");
         var property = snapshot.Properties[new LongOptionToken("token")];
         var parsingResult = GetGeneratedParsingResult(
             result,
@@ -594,7 +593,7 @@ public class ExportParsingGeneratorTests
 
         var result = RunGenerator(source, "Fixtures.Command");
         var symbols = GetSymbols(result, "Fixtures.Command");
-        var snapshot = GetCliSchemaBuilder(result, "Fixtures.Command").Build();
+        var snapshot = GetCliSchema(result, "Fixtures.Command");
 
         await Assert.That(symbols.OfType<ParameterDefinition>().Count()).IsEqualTo(1);
         await Assert.That(symbols.OfType<PropertyDefinition>().Count()).IsEqualTo(1);
@@ -603,6 +602,8 @@ public class ExportParsingGeneratorTests
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
         await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsFalse();
         await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "CreateParsing")).IsFalse();
+        await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "ExportSchema")).IsTrue();
+        await Assert.That(HasPublicStaticMethod(result, "Fixtures.Command", "ExportParsing")).IsFalse();
     }
 
     [Test]
@@ -646,12 +647,12 @@ public class ExportParsingGeneratorTests
 
         try
         {
-            _ = GetCliSchemaBuilder(result, "Fixtures.Command");
+            _ = GetCliSchema(result, "Fixtures.Command");
             throw new InvalidOperationException("Expected global subcommand promotion to fail.");
         }
         catch (TargetInvocationException exception)
         {
-            await Assert.That(GetDeepestMessage(exception)).Contains("cannot be promoted");
+            await Assert.That(GetDeepestMessage(exception)).Contains("property token");
             await Assert.That(GetDeepestMessage(exception)).Contains("force");
         }
     }
@@ -797,7 +798,7 @@ public class ExportParsingGeneratorTests
             [
                 new ExportDocumentGenerator().AsSourceGenerator(),
                 new ExportSymbolsGenerator().AsSourceGenerator(),
-                new ExportParsingGenerator().AsSourceGenerator()
+                new ExportSchemaGenerator().AsSourceGenerator()
             ]);
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var generatorDiagnostics);
 
@@ -831,19 +832,20 @@ public class ExportParsingGeneratorTests
         references.Add(MetadataReference.CreateFromFile(typeof(CommandAttribute).Assembly.Location));
         references.Add(MetadataReference.CreateFromFile(typeof(CliSchemaParser).Assembly.Location));
         references.Add(MetadataReference.CreateFromFile(typeof(ICliSchemaExporter).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(CliSchemaExtensions).Assembly.Location));
 
         return references.ToImmutable();
     }
 
-    private static CliSchemaBuilder GetCliSchemaBuilder(GeneratorRunOutcome outcome, string targetTypeMetadataName)
+    private static CliSchema GetCliSchema(GeneratorRunOutcome outcome, string targetTypeMetadataName)
     {
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
-        var method = targetType.GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)
-            ?? throw new InvalidOperationException("Generated type does not define the expected ExportParsing method.");
+        var method = targetType.GetMethod("ExportSchema", BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Generated type does not define the expected ExportSchema method.");
         var rawValue = method.Invoke(null, [CreateOptions()])
-            ?? throw new InvalidOperationException("Generated ExportParsing method returned null.");
+            ?? throw new InvalidOperationException("Generated ExportSchema method returned null.");
 
-        return (CliSchemaBuilder)rawValue;
+        return (CliSchema)rawValue;
     }
 
     private static Symbol[] GetSymbols(GeneratorRunOutcome outcome, string targetTypeMetadataName)
@@ -865,7 +867,7 @@ public class ExportParsingGeneratorTests
         return ContinueSubcommands(CliSchemaParser.CreateParsing(
             CreateOptions(),
             arguments,
-            GetCliSchemaBuilder(outcome, targetTypeMetadataName).Build()));
+            GetCliSchema(outcome, targetTypeMetadataName)));
     }
 
     private static ParsingResult GetGeneratedDeferredParsingResult(
@@ -873,7 +875,7 @@ public class ExportParsingGeneratorTests
         string targetTypeMetadataName,
         ImmutableArray<Token> arguments)
     {
-        return CliSchemaParser.CreateParsing(CreateOptions(), arguments, GetCliSchemaBuilder(outcome, targetTypeMetadataName).Build());
+        return CliSchemaParser.CreateParsing(CreateOptions(), arguments, GetCliSchema(outcome, targetTypeMetadataName));
     }
 
     private static ParsingResult ContinueSubcommands(ParsingResult result)
@@ -1011,13 +1013,12 @@ public class ExportParsingGeneratorTests
     {
         try
         {
-            _ = GetCliSchemaBuilder(outcome, targetTypeMetadataName);
+            _ = GetCliSchema(outcome, targetTypeMetadataName);
             throw new InvalidOperationException("Expected inherited schema merge to fail.");
         }
         catch (TargetInvocationException exception)
         {
-            var message = GetDeepestMessage(exception);
-            await Assert.That(message).Contains("Inherited command schema conflict");
+            var message = GetDeepestMessage(exception).ToLowerInvariant();
             await Assert.That(message).Contains(expectedConflictKind);
         }
     }

@@ -16,6 +16,7 @@ internal static class TypeProviderResolver
     public static ParsingResult ParseValue(ParsingOptions options,
                                            ImmutableArray<Token> input,
                                            Type targetType,
+                                           string? format,
                                            string unsupportedCallerName)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -30,6 +31,7 @@ internal static class TypeProviderResolver
                                        input,
                                        effectiveTargetType,
                                        visibleProviders,
+                                       format,
                                        options.TypeProviders.Providers,
                                        out var result))
         {
@@ -40,6 +42,7 @@ internal static class TypeProviderResolver
                                           input,
                                           effectiveTargetType,
                                           visibleProviders,
+                                          format,
                                           options.TypeProviders.ExtendedProviders,
                                           out result))
         {
@@ -50,6 +53,7 @@ internal static class TypeProviderResolver
                                        input,
                                        effectiveTargetType,
                                        visibleProviders,
+                                       format,
                                        builtInProviders.Providers.Providers,
                                        out result))
         {
@@ -60,6 +64,7 @@ internal static class TypeProviderResolver
                                           input,
                                           effectiveTargetType,
                                           visibleProviders,
+                                          format,
                                           builtInProviders.Providers.ExtendedProviders,
                                           out result))
         {
@@ -74,6 +79,7 @@ internal static class TypeProviderResolver
                                                    ImmutableArray<Token> input,
                                                    Type targetType,
                                                    TypeProviders visibleProviders,
+                                                   string? format,
                                                    ImmutableDictionary<Type, ITypeProvider> providers,
                                                    out ParsingResult result)
     {
@@ -85,11 +91,11 @@ internal static class TypeProviderResolver
 
         if (provider is ICoreTypeProvider coreProvider)
         {
-            result = coreProvider.Parse(input, visibleProviders, null);
+            result = coreProvider.Parse(input, visibleProviders, format);
             return true;
         }
 
-        if (provider.TryParse(input, visibleProviders, null, out var parsedValue, out var error))
+        if (provider.TryParse(input, visibleProviders, format, out var parsedValue, out var error))
         {
             result = DebugOutput.Emit(options,
                                       new ParsingFinished<object?>(parsedValue),
@@ -112,6 +118,7 @@ internal static class TypeProviderResolver
                                                       ImmutableArray<Token> input,
                                                       Type targetType,
                                                       TypeProviders visibleProviders,
+                                                      string? format,
                                                       ImmutableArray<IExtendedTypeProvider> providers,
                                                       out ParsingResult result)
     {
@@ -119,7 +126,7 @@ internal static class TypeProviderResolver
         {
             if (provider is ICoreExtendedTypeProvider coreProvider)
             {
-                var coreResult = coreProvider.Parse(input, visibleProviders, targetType, null);
+                var coreResult = coreProvider.Parse(input, visibleProviders, targetType, format);
                 if (coreResult is null)
                 {
                     continue;
@@ -129,7 +136,7 @@ internal static class TypeProviderResolver
                 return true;
             }
 
-            if (provider.TryParse(input, visibleProviders, targetType, null, out var parsedValue, out var error))
+            if (provider.TryParse(input, visibleProviders, targetType, format, out var parsedValue, out var error))
             {
                 result = DebugOutput.Emit(options,
                                           new ParsingFinished<object?>(parsedValue),
@@ -205,12 +212,12 @@ internal static class TypeProviderResolver
 
     private sealed class DelegateCoreTypeProvider(
         ParsingOptions options,
-        Func<ParsingOptions, ImmutableArray<Token>, ParsingResult> parse)
+        Func<ParsingOptions, ImmutableArray<Token>, string?, ParsingResult> parse)
         : ICoreTypeProvider
     {
         public ParsingResult Parse(ImmutableArray<Token> input, TypeProviders typeProviders, string? format)
         {
-            return parse(options, input);
+            return parse(options, input, format);
         }
 
         public bool TryParse(ImmutableArray<Token> input,
@@ -241,12 +248,12 @@ internal static class TypeProviderResolver
 
     private sealed class DelegateCoreExtendedTypeProvider(
         ParsingOptions options,
-        Func<ParsingOptions, ImmutableArray<Token>, TypeProviders, Type, ParsingResult?> parse)
+        Func<ParsingOptions, ImmutableArray<Token>, TypeProviders, Type, string?, ParsingResult?> parse)
         : ICoreExtendedTypeProvider
     {
         public ParsingResult? Parse(ImmutableArray<Token> input, TypeProviders typeProviders, Type symbolType, string? format)
         {
-            return parse(options, input, typeProviders, symbolType);
+            return parse(options, input, typeProviders, symbolType, format);
         }
 
         public bool TryParse(ImmutableArray<Token> input,
@@ -289,38 +296,38 @@ internal static class TypeProviderResolver
         {
             var exactProviders = ImmutableDictionary.CreateBuilder<Type, ITypeProvider>();
 
-            exactProviders[typeof(string)] = new DelegateCoreTypeProvider(options, CreateStringParsing);
-            exactProviders[typeof(bool)] = new DelegateCoreTypeProvider(options, static (current, input) => BooleanParser.CreateParsing(current, input, false));
-            exactProviders[typeof(byte)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, (byte)0));
-            exactProviders[typeof(sbyte)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, (sbyte)0));
-            exactProviders[typeof(ushort)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, (ushort)0));
-            exactProviders[typeof(short)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, (short)0));
-            exactProviders[typeof(uint)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, 0u));
-            exactProviders[typeof(int)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, 0));
-            exactProviders[typeof(ulong)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, 0UL));
-            exactProviders[typeof(long)] = new DelegateCoreTypeProvider(options, static (current, input) => NumberParser.CreateParsing(current, input, 0L));
-            exactProviders[typeof(float)] = new DelegateCoreTypeProvider(options, static (current, input) => FloatParser.CreateParsing(current, input, 0f));
-            exactProviders[typeof(double)] = new DelegateCoreTypeProvider(options, static (current, input) => FloatParser.CreateParsing(current, input, 0d));
-            exactProviders[typeof(decimal)] = new DelegateCoreTypeProvider(options, static (current, input) => FloatParser.CreateParsing(current, input, decimal.Zero));
-            exactProviders[typeof(Guid)] = new DelegateCoreTypeProvider(options, static (current, input) => CommonParser.CreateParsing(current, input, Guid.Empty));
-            exactProviders[typeof(Uri)] = new DelegateCoreTypeProvider(options, static (current, input) => CommonParser.CreateParsing(current, input, new Uri("https://placeholder.invalid")));
-            exactProviders[typeof(DateTime)] = new DelegateCoreTypeProvider(options, static (current, input) => CommonParser.CreateParsing(current, input, default(DateTime)));
-            exactProviders[typeof(DateTimeOffset)] = new DelegateCoreTypeProvider(options, static (current, input) => CommonParser.CreateParsing(current, input, default(DateTimeOffset)));
-            exactProviders[typeof(DateOnly)] = new DelegateCoreTypeProvider(options, static (current, input) => CommonParser.CreateParsing(current, input, default(DateOnly)));
-            exactProviders[typeof(TimeOnly)] = new DelegateCoreTypeProvider(options, static (current, input) => CommonParser.CreateParsing(current, input, default(TimeOnly)));
+            exactProviders[typeof(string)] = new DelegateCoreTypeProvider(options, static (current, input, _) => CreateStringParsing(current, input));
+            exactProviders[typeof(bool)] = new DelegateCoreTypeProvider(options, static (current, input, _) => BooleanParser.CreateParsing(current, input, false));
+            exactProviders[typeof(byte)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, (byte)0));
+            exactProviders[typeof(sbyte)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, (sbyte)0));
+            exactProviders[typeof(ushort)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, (ushort)0));
+            exactProviders[typeof(short)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, (short)0));
+            exactProviders[typeof(uint)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, 0u));
+            exactProviders[typeof(int)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, 0));
+            exactProviders[typeof(ulong)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, 0UL));
+            exactProviders[typeof(long)] = new DelegateCoreTypeProvider(options, static (current, input, _) => NumberParser.CreateParsing(current, input, 0L));
+            exactProviders[typeof(float)] = new DelegateCoreTypeProvider(options, static (current, input, _) => FloatParser.CreateParsing(current, input, 0f));
+            exactProviders[typeof(double)] = new DelegateCoreTypeProvider(options, static (current, input, _) => FloatParser.CreateParsing(current, input, 0d));
+            exactProviders[typeof(decimal)] = new DelegateCoreTypeProvider(options, static (current, input, _) => FloatParser.CreateParsing(current, input, decimal.Zero));
+            exactProviders[typeof(Guid)] = new DelegateCoreTypeProvider(options, static (current, input, _) => CommonParser.CreateParsing(current, input, Guid.Empty));
+            exactProviders[typeof(Uri)] = new DelegateCoreTypeProvider(options, static (current, input, _) => CommonParser.CreateParsing(current, input, new Uri("https://placeholder.invalid")));
+            exactProviders[typeof(DateTime)] = new DelegateCoreTypeProvider(options, static (current, input, format) => CommonParser.CreateParsing(current, input, default(DateTime), format));
+            exactProviders[typeof(DateTimeOffset)] = new DelegateCoreTypeProvider(options, static (current, input, format) => CommonParser.CreateParsing(current, input, default(DateTimeOffset), format));
+            exactProviders[typeof(DateOnly)] = new DelegateCoreTypeProvider(options, static (current, input, format) => CommonParser.CreateParsing(current, input, default(DateOnly), format));
+            exactProviders[typeof(TimeOnly)] = new DelegateCoreTypeProvider(options, static (current, input, format) => CommonParser.CreateParsing(current, input, default(TimeOnly), format));
 
             TypeProviders providers = new(
                 exactProviders.ToImmutable(),
                 [
                     new DelegateCoreExtendedTypeProvider(
                         options,
-                        static (current, input, _, symbolType) => symbolType.IsEnum
+                        static (current, input, _, symbolType, _) => symbolType.IsEnum
                             ? EnumParser.CreateParsing(current, input, symbolType, Enum.ToObject(symbolType, 0))
                             : null),
                     new DelegateCoreExtendedTypeProvider(
                         options,
-                        static (current, input, _, symbolType) => ContainerType.TryCreate(symbolType, out var containerType)
-                            ? ContainerParser.CreateParsing(current, input, containerType)
+                        static (current, input, _, symbolType, format) => ContainerType.TryCreate(symbolType, out var containerType)
+                            ? ContainerParser.CreateParsing(current, input, containerType, format)
                             : null)
                 ]);
 

@@ -259,6 +259,76 @@ public sealed class CliSchemaParserTests
     }
 
     [Test]
+    public async Task CreateParsing_Uses_Property_Format_For_Time_Values()
+    {
+        var date = CreateProperty("date", typeof(DateOnly)) with
+        {
+            Format = "yyyyMMdd"
+        };
+        var time = CreateProperty("time", typeof(TimeOnly)) with
+        {
+            Format = "HHmmss"
+        };
+        var schema = CreateBuilder(properties: [date, time]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [
+                new LongOptionToken("date"),
+                new ArgumentOrCommandToken("20260508"),
+                new LongOptionToken("time"),
+                new ArgumentOrCommandToken("123456")
+            ],
+            schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Properties[date]).IsEqualTo(new DateOnly(2026, 5, 8));
+        await Assert.That(command.Properties[time]).IsEqualTo(new TimeOnly(12, 34, 56));
+    }
+
+    [Test]
+    public async Task CreateParsing_Uses_Parameter_Format_For_Time_Values()
+    {
+        var date = CreateParameter("date", typeof(DateOnly), ValueRange.One) with
+        {
+            Format = "yyyyMMdd"
+        };
+        var schema = CreateBuilder(arguments: [date]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [new ArgumentOrCommandToken("20260508")],
+            schema);
+        var command = AssertFinished(result);
+
+        await Assert.That(command.Arguments[date]).IsEqualTo(new DateOnly(2026, 5, 8));
+    }
+
+    [Test]
+    public async Task CreateParsing_Uses_Definition_Format_For_Time_Containers()
+    {
+        var dates = CreateProperty("date", typeof(ImmutableArray<DateOnly>)) with
+        {
+            NumArgs = ValueRange.OneOrMore,
+            Format = "yyyyMMdd"
+        };
+        var schema = CreateBuilder(properties: [dates]).Build();
+
+        var result = CliSchemaParser.CreateParsing(
+            CreateOptions(),
+            [
+                new LongOptionToken("date"),
+                new ArgumentOrCommandToken("20260508"),
+                new ArgumentOrCommandToken("20260509")
+            ],
+            schema);
+        var command = AssertFinished(result);
+
+        await Assert.That((ImmutableArray<DateOnly>)command.Properties[dates]).IsEquivalentTo(
+            [new DateOnly(2026, 5, 8), new DateOnly(2026, 5, 9)]);
+    }
+
+    [Test]
     public async Task CreateParsing_Applies_Defaults_And_Validation()
     {
         var retries = CreateProperty("retries", typeof(int)) with
