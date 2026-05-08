@@ -279,6 +279,8 @@ internal sealed class CommandModel
 
                 members.Add(member);
                 RegisterConflict(diagnostics, propertyNames, member.CommandLineKey, member);
+                RegisterCrossConflict(diagnostics, longAliases, member.CommandLineKey, member);
+                RegisterCrossConflicts(diagnostics, propertyNames, member.LongAliases, member);
                 RegisterConflicts(diagnostics, longAliases, member.LongAliases, member);
                 RegisterConflicts(diagnostics, shortAliases, member.ShortAliases, member);
                 continue;
@@ -587,6 +589,32 @@ internal sealed class CommandModel
         }
 
         registry[key] = member;
+    }
+
+    private static void RegisterCrossConflicts(
+        ImmutableArray<DiagnosticInfo>.Builder diagnostics,
+        Dictionary<string, MemberModel> registry,
+        ImmutableArray<AliasModel> aliases,
+        MemberModel member)
+    {
+        foreach (var alias in aliases)
+        {
+            RegisterCrossConflict(diagnostics, registry, alias.Name, member);
+        }
+    }
+
+    private static void RegisterCrossConflict(
+        ImmutableArray<DiagnosticInfo>.Builder diagnostics,
+        Dictionary<string, MemberModel> registry,
+        string key,
+        MemberModel member)
+    {
+        if (!registry.TryGetValue(key, out var existing) || ReferenceEquals(existing, member))
+        {
+            return;
+        }
+
+        diagnostics.Add(new DiagnosticInfo(GeneratorDescriptors.AliasConflict, member.Location, [key, existing.MemberName, member.MemberName]));
     }
 
     public static AttributeData? GetAttribute(ISymbol symbol, string metadataName)

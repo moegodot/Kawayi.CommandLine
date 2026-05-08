@@ -177,6 +177,270 @@ public class ExportParsingGeneratorTests
     }
 
     [Test]
+    public async Task CommandAttribute_On_Derived_Command_Preserves_BaseType_And_Generates_Parsing_Surface()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            public class BarCommand
+            {
+            }
+
+            [Command]
+            public partial class FooCommand : BarCommand
+            {
+                /// <summary>
+                /// Verbose summary
+                /// </summary>
+                [Property]
+                [LongAlias("verbose")]
+                public bool Verbose { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.FooCommand");
+        var targetType = result.Compilation.GetTypeByMetadataName("Fixtures.FooCommand")
+            ?? throw new InvalidOperationException("Expected FooCommand to be available in the generated compilation.");
+        var snapshot = GetCliSchemaBuilder(result, "Fixtures.FooCommand").Build();
+        var diagnostics = GetGeneratorDiagnostics(result);
+
+        await Assert.That(targetType.BaseType?.ToDisplayString()).IsEqualTo("Fixtures.BarCommand");
+        await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.ISymbolExporter")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.FooCommand", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.FooCommand>")).IsTrue();
+        await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("verbose"))).IsTrue();
+        await Assert.That(diagnostics.Any(static item => item.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task CommandAttribute_On_Derived_Command_Merges_Base_And_Derived_Parsing_Schemas()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class BarChildCommand
+            {
+                /// <summary>
+                /// Bar child flag summary
+                /// </summary>
+                [Property]
+                [LongAlias("bar-child-flag")]
+                public bool BarChildFlag { get; set; }
+            }
+
+            [Command]
+            public partial class FooChildCommand
+            {
+                /// <summary>
+                /// Foo child flag summary
+                /// </summary>
+                [Property]
+                [LongAlias("foo-child-flag")]
+                public bool FooChildFlag { get; set; }
+            }
+
+            [Command]
+            public partial class BarCommand
+            {
+                /// <summary>
+                /// Bar input summary
+                /// </summary>
+                [Argument(0)]
+                [ValueRange(1, 1)]
+                public string BarInput { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Bar flag summary
+                /// </summary>
+                [Property]
+                [LongAlias("bar-flag")]
+                public bool BarFlag { get; set; }
+
+                /// <summary>
+                /// Bar run summary
+                /// </summary>
+                [Subcommand]
+                public BarChildCommand? BarRun { get; set; }
+            }
+
+            [Command]
+            public partial class FooCommand : BarCommand
+            {
+                /// <summary>
+                /// Foo input summary
+                /// </summary>
+                [Argument(0)]
+                [ValueRange(1, 1)]
+                public string FooInput { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Foo flag summary
+                /// </summary>
+                [Property]
+                [LongAlias("foo-flag")]
+                public bool FooFlag { get; set; }
+
+                /// <summary>
+                /// Foo run summary
+                /// </summary>
+                [Subcommand]
+                public FooChildCommand? FooRun { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.FooCommand");
+        var barSnapshot = GetCliSchemaBuilder(result, "Fixtures.BarCommand").Build();
+        var fooSnapshot = GetCliSchemaBuilder(result, "Fixtures.FooCommand").Build();
+        var parsingResult = GetGeneratedParsingResult(
+            result,
+            "Fixtures.FooCommand",
+            [
+                new ArgumentOrCommandToken("bar-value"),
+                new ArgumentOrCommandToken("foo-value"),
+                new LongOptionToken("bar-flag"),
+                new ArgumentOrCommandToken("true"),
+                new LongOptionToken("foo-flag"),
+                new ArgumentOrCommandToken("true")
+            ]);
+        var command = AssertFinishedCollection(parsingResult);
+
+        await Assert.That(barSnapshot.Argument.Select(static item => item.Information.Name.Value)).IsEquivalentTo(["bar-input"]);
+        await Assert.That(barSnapshot.Properties.ContainsKey(new LongOptionToken("bar-flag"))).IsTrue();
+        await Assert.That(barSnapshot.Properties.ContainsKey(new LongOptionToken("foo-flag"))).IsFalse();
+        await Assert.That(barSnapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("bar-run"))).IsTrue();
+        await Assert.That(barSnapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("foo-run"))).IsFalse();
+
+        await Assert.That(fooSnapshot.GeneratedFrom?.FullName).IsEqualTo("Fixtures.FooCommand");
+        await Assert.That(fooSnapshot.Argument.Select(static item => item.Information.Name.Value)).IsEquivalentTo(["bar-input", "foo-input"]);
+        await Assert.That(fooSnapshot.Properties.ContainsKey(new LongOptionToken("bar-flag"))).IsTrue();
+        await Assert.That(fooSnapshot.Properties.ContainsKey(new LongOptionToken("foo-flag"))).IsTrue();
+        await Assert.That(fooSnapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("bar-run"))).IsTrue();
+        await Assert.That(fooSnapshot.SubcommandDefinitions.ContainsKey(new ArgumentOrCommandToken("foo-run"))).IsTrue();
+        await Assert.That(fooSnapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken("bar-run"))).IsTrue();
+        await Assert.That(fooSnapshot.Subcommands.ContainsKey(new ArgumentOrCommandToken("foo-run"))).IsTrue();
+        await Assert.That(HasExplicitString(command, "bar-input", "bar-value")).IsTrue();
+        await Assert.That(HasExplicitString(command, "foo-input", "foo-value")).IsTrue();
+        await Assert.That(HasExplicitBoolean(command, "bar-flag")).IsTrue();
+        await Assert.That(HasExplicitBoolean(command, "foo-flag")).IsTrue();
+    }
+
+    [Test]
+    public async Task CommandAttribute_On_Derived_Command_Fails_For_Duplicate_Inherited_Arguments()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class BarCommand
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+            }
+
+            [Command]
+            public partial class FooCommand : BarCommand
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.FooCommand");
+
+        await AssertInheritedSchemaConflict(result, "Fixtures.FooCommand", "argument");
+    }
+
+    [Test]
+    public async Task CommandAttribute_On_Derived_Command_Fails_For_Duplicate_Inherited_Properties()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class BarCommand
+            {
+                /// <summary>
+                /// Format summary
+                /// </summary>
+                [Property]
+                [LongAlias("format")]
+                public string Format { get; set; } = string.Empty;
+            }
+
+            [Command]
+            public partial class FooCommand : BarCommand
+            {
+                /// <summary>
+                /// Other format summary
+                /// </summary>
+                [Property]
+                [LongAlias("format")]
+                public string OtherFormat { get; set; } = string.Empty;
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.FooCommand");
+
+        await AssertInheritedSchemaConflict(result, "Fixtures.FooCommand", "property token");
+    }
+
+    [Test]
+    public async Task CommandAttribute_On_Derived_Command_Fails_For_Duplicate_Inherited_Subcommands()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class ChildCommand
+            {
+            }
+
+            [Command]
+            public partial class BarCommand
+            {
+                /// <summary>
+                /// Run summary
+                /// </summary>
+                [Subcommand]
+                public ChildCommand? Run { get; set; }
+            }
+
+            [Command]
+            public partial class FooCommand : BarCommand
+            {
+                /// <summary>
+                /// Run summary
+                /// </summary>
+                [Subcommand]
+                public ChildCommand? Run { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.FooCommand");
+
+        await AssertInheritedSchemaConflict(result, "Fixtures.FooCommand", "subcommand token");
+    }
+
+    [Test]
     public async Task Global_Subcommand_Promotes_Parsing_Surface_And_Preserves_Nested_Subcommands()
     {
         const string source = """
@@ -258,6 +522,138 @@ public class ExportParsingGeneratorTests
         await Assert.That(HasExplicitBoolean(parentValues, "force-option")).IsTrue();
         await Assert.That(childValues.CurrentCommandDefinition?.Information.Name.Value).IsEqualTo("watch");
         await Assert.That(HasExplicitBoolean(childValues, "once")).IsTrue();
+    }
+
+    [Test]
+    public async Task Hidden_Aliases_Remain_Parsable_Without_Becoming_Visible()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Token summary
+                /// </summary>
+                [Property]
+                [LongAlias("secret-token", visible: false)]
+                [ShortAlias("s", visible: false)]
+                public string Token { get; set; } = string.Empty;
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.Command");
+        var snapshot = builder.Build();
+        var property = snapshot.Properties[new LongOptionToken("token")];
+        var parsingResult = GetGeneratedParsingResult(
+            result,
+            "Fixtures.Command",
+            [new LongOptionToken("secret-token"), new ArgumentOrCommandToken("hush")]);
+        var command = AssertFinishedCollection(parsingResult);
+
+        await Assert.That(property.Information.Name.Visible).IsTrue();
+        await Assert.That(property.LongName["secret-token"].Visible).IsFalse();
+        await Assert.That(property.ShortName["s"].Visible).IsFalse();
+        await Assert.That(snapshot.Properties.ContainsKey(new LongOptionToken("secret-token"))).IsTrue();
+        await Assert.That(snapshot.Properties.ContainsKey(new ShortOptionToken("s"))).IsTrue();
+        await Assert.That(HasExplicitString(command, "token", "hush")).IsTrue();
+    }
+
+    [Test]
+    public async Task CommandAttribute_With_Explicit_ExportAttributes_Generates_One_Parsing_Surface()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            [ExportDocument]
+            [ExportSymbols]
+            [ExportParsing]
+            public partial class Command
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("force")]
+                public bool Force { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+        var symbols = GetSymbols(result, "Fixtures.Command");
+        var snapshot = GetCliSchemaBuilder(result, "Fixtures.Command").Build();
+
+        await Assert.That(symbols.OfType<ParameterDefinition>().Count()).IsEqualTo(1);
+        await Assert.That(symbols.OfType<PropertyDefinition>().Count()).IsEqualTo(1);
+        await Assert.That(snapshot.Argument.Count).IsEqualTo(1);
+        await Assert.That(snapshot.Properties.Values.Distinct().Count()).IsEqualTo(1);
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.ICliSchemaExporter")).IsTrue();
+        await Assert.That(HasInterface(result, "Fixtures.Command", "Kawayi.CommandLine.Abstractions.IParsable<Fixtures.Command>")).IsTrue();
+    }
+
+    [Test]
+    public async Task Global_Subcommand_Promotion_Conflict_Fails_When_Exporting_Schema()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class GlobalOptionsCommand
+            {
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("force")]
+                public bool Force { get; set; }
+            }
+
+            [Command]
+            public partial class Command
+            {
+                /// <summary>
+                /// Force summary
+                /// </summary>
+                [Property]
+                [LongAlias("root-force")]
+                public bool Force { get; set; }
+
+                /// <summary>
+                /// Global summary
+                /// </summary>
+                [Subcommand(global: true)]
+                public GlobalOptionsCommand Global { get; set; } = new();
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command");
+
+        try
+        {
+            _ = GetCliSchemaBuilder(result, "Fixtures.Command");
+            throw new InvalidOperationException("Expected global subcommand promotion to fail.");
+        }
+        catch (TargetInvocationException exception)
+        {
+            await Assert.That(GetDeepestMessage(exception)).Contains("cannot be promoted");
+            await Assert.That(GetDeepestMessage(exception)).Contains("force");
+        }
     }
 
     [Test]
@@ -583,6 +979,36 @@ public class ExportParsingGeneratorTests
                 value = null;
                 return false;
         }
+    }
+
+    private static async Task AssertInheritedSchemaConflict(
+        GeneratorRunOutcome outcome,
+        string targetTypeMetadataName,
+        string expectedConflictKind)
+    {
+        try
+        {
+            _ = GetCliSchemaBuilder(outcome, targetTypeMetadataName);
+            throw new InvalidOperationException("Expected inherited schema merge to fail.");
+        }
+        catch (TargetInvocationException exception)
+        {
+            var message = GetDeepestMessage(exception);
+            await Assert.That(message).Contains("Inherited command schema conflict");
+            await Assert.That(message).Contains(expectedConflictKind);
+        }
+    }
+
+    private static string GetDeepestMessage(Exception exception)
+    {
+        var current = exception;
+
+        while (current.InnerException is not null)
+        {
+            current = current.InnerException;
+        }
+
+        return current.Message;
     }
 
     private sealed record GeneratorRunOutcome(

@@ -55,6 +55,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         var model = CommandModel.Create(typeSymbol, cancellationToken);
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
         var subcommands = ImmutableArray.CreateBuilder<MemberModel>();
+        string? baseSchemaExporterTypeName = null;
 
         foreach (var member in model.Members.Where(static item => item.Kind == MemberKind.Subcommand))
         {
@@ -69,7 +70,15 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             subcommands.Add(member);
         }
 
-        return new ParsingTarget(model, subcommands.ToImmutable(), diagnostics.ToImmutable());
+        var baseType = model.TypeSymbol.BaseType;
+        if (baseType is not null &&
+            baseType.SpecialType != SpecialType.System_Object &&
+            SupportsCliSchemaExporter(baseType, cancellationToken, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default)))
+        {
+            baseSchemaExporterTypeName = baseType.ToDisplayString(GeneratorFormats.FullyQualifiedType);
+        }
+
+        return new ParsingTarget(model, subcommands.ToImmutable(), diagnostics.ToImmutable(), baseSchemaExporterTypeName);
     }
 
     private static bool SupportsCliSchemaExporter(
@@ -215,6 +224,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         var selfTypeReference = GeneratorSource.BuildSelfTypeReference(model.TypeSymbol);
         var hasPromotedGlobalSubcommands = target.Subcommands.Any(static item => item.IsGlobalSubcommand);
         var hasRegularSubcommands = target.Subcommands.Any(static item => !item.IsGlobalSubcommand);
+        var hasInheritedSchema = target.BaseSchemaExporterTypeName is not null;
 
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <summary>");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// Exports a mutable parsing builder for this command type.");
@@ -231,6 +241,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             builder,
             indentLevel + 1,
             "var builder = new global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder(global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.CommandDefinition>(), global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder>(), global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.PropertyDefinition>(), global::System.Collections.Immutable.ImmutableList.CreateBuilder<global::Kawayi.CommandLine.Abstractions.ParameterDefinition>());");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, $"builder.GeneratedFrom = typeof({model.TypeSymbol.ToDisplayString(GeneratorFormats.FullyQualifiedType)});");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var symbol in Symbols)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "switch (symbol)");
@@ -281,7 +292,18 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
             }
         }
 
-        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return builder;");
+        if (hasInheritedSchema)
+        {
+            GeneratorSource.AppendIndentedLine(
+                builder,
+                indentLevel + 1,
+                $"return MergeInheritedSchemaBuilder({target.BaseSchemaExporterTypeName}.ExportParsing(parsingOptions), builder, {typeNameLiteral}, {SymbolDisplay.FormatLiteral(target.BaseSchemaExporterTypeName!, true)});");
+        }
+        else
+        {
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return builder;");
+        }
+
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "/// <summary>");
@@ -304,6 +326,11 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
                            indentLevel + 1,
                            "return global::Kawayi.CommandLine.Core.CliSchemaParser.CreateParsing(options, arguments, snapshot);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        if (hasInheritedSchema)
+        {
+            AppendInheritedSchemaMergeHelpers(builder, indentLevel);
+        }
 
         if (target.Subcommands.Length == 0)
         {
@@ -389,13 +416,148 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
     }
 
+    private static void AppendInheritedSchemaMergeHelpers(StringBuilder builder, int indentLevel)
+    {
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(
+            builder,
+            indentLevel,
+            "private static global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder MergeInheritedSchemaBuilder(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder baseBuilder, global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder ownBuilder, string ownTypeName, string baseTypeName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var merged = new global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder(global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.CommandDefinition>(), global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder>(), global::System.Collections.Immutable.ImmutableDictionary.CreateBuilder<string, global::Kawayi.CommandLine.Abstractions.PropertyDefinition>(), global::System.Collections.Immutable.ImmutableList.CreateBuilder<global::Kawayi.CommandLine.Abstractions.ParameterDefinition>());");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "merged.GeneratedFrom = ownBuilder.GeneratedFrom ?? baseBuilder.GeneratedFrom;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var argument in baseBuilder.Argument)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedArgument(merged, argument, baseTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var argument in ownBuilder.Argument)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedArgument(merged, argument, ownTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var property in baseBuilder.Properties.Values)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedProperty(merged, property, baseTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var property in ownBuilder.Properties.Values)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedProperty(merged, property, ownTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in baseBuilder.SubcommandDefinitions)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedSubcommandDefinition(merged, pair.Value, baseTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in ownBuilder.SubcommandDefinitions)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedSubcommandDefinition(merged, pair.Value, ownTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in baseBuilder.Subcommands)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedSubcommandBuilder(merged, pair.Key, pair.Value, baseTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var pair in ownBuilder.Subcommands)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "AddMergedSubcommandBuilder(merged, pair.Key, pair.Value, ownTypeName);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return merged;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static void AddMergedArgument(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, global::Kawayi.CommandLine.Abstractions.ParameterDefinition argument, string ownerTypeName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "if (global::System.Linq.Enumerable.Any(builder.Argument, existing => global::System.StringComparer.Ordinal.Equals(existing.Information.Name.Value, argument.Information.Name.Value)))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "throw new global::System.InvalidOperationException(\"Inherited command schema conflict while exporting '\" + ownerTypeName + \"': argument '\" + argument.Information.Name.Value + \"' is defined by more than one command type.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "builder.Argument.Add(argument);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static void AddMergedProperty(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, global::Kawayi.CommandLine.Abstractions.PropertyDefinition property, string ownerTypeName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var token in GetPropertyTokens(property))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "if (ContainsPropertyToken(builder, token))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "throw new global::System.InvalidOperationException(\"Inherited command schema conflict while exporting '\" + ownerTypeName + \"': property token '\" + FormatOptionToken(token) + \"' is defined by more than one command type.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "builder.Properties[property.Information.Name.Value] = property;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static void AddMergedSubcommandDefinition(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, global::Kawayi.CommandLine.Abstractions.CommandDefinition command, string ownerTypeName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var token in GetSubcommandTokens(command))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "if (ContainsSubcommandToken(builder, token))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, "throw new global::System.InvalidOperationException(\"Inherited command schema conflict while exporting '\" + ownerTypeName + \"': subcommand token '\" + token.Value + \"' is defined by more than one command type.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "builder.SubcommandDefinitions[command.Information.Name.Value] = command;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static void AddMergedSubcommandBuilder(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, string key, global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder childBuilder, string ownerTypeName)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "if (builder.Subcommands.ContainsKey(key))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "throw new global::System.InvalidOperationException(\"Inherited command schema conflict while exporting '\" + ownerTypeName + \"': subcommand schema '\" + key + \"' is defined by more than one command type.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "builder.Subcommands[key] = childBuilder;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static global::System.Collections.Generic.IEnumerable<global::Kawayi.CommandLine.Abstractions.OptionToken> GetPropertyTokens(global::Kawayi.CommandLine.Abstractions.PropertyDefinition property)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "yield return new global::Kawayi.CommandLine.Abstractions.LongOptionToken(property.Information.Name.Value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var alias in property.LongName.Values)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "yield return new global::Kawayi.CommandLine.Abstractions.LongOptionToken(alias.Value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var alias in property.ShortName.Values)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "yield return new global::Kawayi.CommandLine.Abstractions.ShortOptionToken(alias.Value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static global::System.Collections.Generic.IEnumerable<global::Kawayi.CommandLine.Abstractions.ArgumentOrCommandToken> GetSubcommandTokens(global::Kawayi.CommandLine.Abstractions.CommandDefinition command)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "yield return new global::Kawayi.CommandLine.Abstractions.ArgumentOrCommandToken(command.Information.Name.Value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "foreach (var alias in command.Alias.Values)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "yield return new global::Kawayi.CommandLine.Abstractions.ArgumentOrCommandToken(alias.Value);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static bool ContainsPropertyToken(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, global::Kawayi.CommandLine.Abstractions.OptionToken token)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return global::System.Linq.Enumerable.Any(builder.Properties.Values, property => global::System.Linq.Enumerable.Contains(GetPropertyTokens(property), token));");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static bool ContainsSubcommandToken(global::Kawayi.CommandLine.Abstractions.CliSchemaBuilder builder, global::Kawayi.CommandLine.Abstractions.ArgumentOrCommandToken token)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return global::System.Linq.Enumerable.Any(builder.SubcommandDefinitions.Values, command => global::System.Linq.Enumerable.Contains(GetSubcommandTokens(command), token));");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, string.Empty);
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "private static string FormatOptionToken(global::Kawayi.CommandLine.Abstractions.OptionToken token)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "return token is global::Kawayi.CommandLine.Abstractions.ShortOptionToken ? \"-\" + token.Value : \"--\" + token.Value;");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
+    }
+
     private sealed class ParsingTarget
     {
-        public ParsingTarget(CommandModel model, ImmutableArray<MemberModel> subcommands, ImmutableArray<DiagnosticInfo> diagnostics)
+        public ParsingTarget(CommandModel model, ImmutableArray<MemberModel> subcommands, ImmutableArray<DiagnosticInfo> diagnostics, string? baseSchemaExporterTypeName)
         {
             Model = model;
             Subcommands = subcommands;
             Diagnostics = diagnostics;
+            BaseSchemaExporterTypeName = baseSchemaExporterTypeName;
         }
 
         public CommandModel Model { get; }
@@ -403,5 +565,7 @@ public sealed class ExportParsingGenerator : IIncrementalGenerator
         public ImmutableArray<MemberModel> Subcommands { get; }
 
         public ImmutableArray<DiagnosticInfo> Diagnostics { get; }
+
+        public string? BaseSchemaExporterTypeName { get; }
     }
 }

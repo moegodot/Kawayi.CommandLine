@@ -3,6 +3,7 @@
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --execution-mode background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format=json --env=region=cn --execution-mode=background
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --workspace-name atelier
+// dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --workspace-name '\--literal-workspace'
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold -1
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload --format json --threshold
 // dotnet run --project samples/Kawayi.CommandLine.Sample -- payload extra-a extra-b --format json --verbose

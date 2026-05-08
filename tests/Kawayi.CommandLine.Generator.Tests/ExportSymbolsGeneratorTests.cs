@@ -1029,7 +1029,48 @@ public class ExportSymbolsGeneratorTests
         var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
         var diagnostics = GetGeneratorDiagnostics(result);
 
-        await Assert.That(diagnostics.Count(static item => item.Id == "KCLG108")).IsEqualTo(4);
+        await Assert.That(diagnostics.Count(static item => item.Id == "KCLG108")).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task ShortAlias_Conflicts_ReportDiagnostic_Without_LongName_CrossTalk()
+    {
+        const string source = """
+            using System.Collections.Immutable;
+            using Kawayi.CommandLine.Abstractions;
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [ExportSymbols]
+            public partial class Command : IDocumentExporter
+            {
+                public static ImmutableDictionary<string, Document> Documents { get; } =
+                    ImmutableDictionary<string, Document>.Empty
+                        .Add("Force", new Document("", ""))
+                        .Add("Fast", new Document("", ""))
+                        .Add("Flag", new Document("", ""));
+
+                [Property]
+                [ShortAlias("f")]
+                public bool Force { get; set; }
+
+                [Property]
+                [ShortAlias("f")]
+                public bool Fast { get; set; }
+
+                [Property]
+                [ShortAlias("force")]
+                public bool Flag { get; set; }
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.Command", expectSuccessfulEmit: false);
+        var diagnostics = GetGeneratorDiagnostics(result);
+
+        await Assert.That(diagnostics.Count(static item => item.Id == "KCLG108")).IsEqualTo(1);
+        await Assert.That(diagnostics.Single(static item => item.Id == "KCLG108").GetMessage()).Contains("Force");
+        await Assert.That(diagnostics.Single(static item => item.Id == "KCLG108").GetMessage()).Contains("Fast");
     }
 
     [Test]

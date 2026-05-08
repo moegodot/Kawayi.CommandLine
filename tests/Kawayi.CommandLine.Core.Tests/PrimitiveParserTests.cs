@@ -295,7 +295,10 @@ public sealed class PrimitiveParserTests
             throw new InvalidOperationException($"Expected parsed value '{expected}', got '{finished.UntypedResult}'.");
         }
 
-        await Assert.That(finished.UntypedResult.GetType()).IsEqualTo(expected!.GetType());
+        var actualValue = finished.UntypedResult ?? throw new InvalidOperationException("Expected parsed value to be non-null.");
+        var expectedValue = expected ?? throw new InvalidOperationException("Expected comparison value to be non-null.");
+
+        await Assert.That(actualValue.GetType()).IsEqualTo(expectedValue.GetType());
     }
 
     private static async Task AssertInvalidArgument(ParsingResult result, string argument, string expect)

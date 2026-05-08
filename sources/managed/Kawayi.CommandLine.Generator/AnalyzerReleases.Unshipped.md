@@ -10,7 +10,7 @@ KCLG104 | Kawayi.CommandLine.Generator | Error | Argument is missing ValueRangeA
 KCLG105 | Kawayi.CommandLine.Generator | Error | Property aliases require PropertyAttribute
 KCLG106 | Kawayi.CommandLine.Generator | Error | Subcommand aliases require SubcommandAttribute
 KCLG107 | Kawayi.CommandLine.Generator | Error | Argument position must be unique
-KCLG108 | Kawayi.CommandLine.Generator | Error | Alias or subcommand name conflict
+KCLG108 | Kawayi.CommandLine.Generator | Error | Alias, option primary name, or subcommand name conflict
 KCLG109 | Kawayi.CommandLine.Generator | Error | ValidatorAttribute requires ArgumentAttribute or PropertyAttribute
 KCLG110 | Kawayi.CommandLine.Generator | Error | Validator method must be a matching static method
 KCLG111 | Kawayi.CommandLine.Generator | Warning | Subcommand property should be nullable

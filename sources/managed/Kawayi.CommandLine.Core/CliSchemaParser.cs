@@ -459,20 +459,22 @@ public sealed class CliSchemaParser
         }
 
         var index = optionIndex + 1;
+        var collectedForCurrentOption = 0;
 
-        while (index < arguments.Length && tokens.Count < maximum)
+        while (index < arguments.Length && collectedForCurrentOption < maximum)
         {
             var next = arguments[index];
 
             if (IsTerminatingFlag(options, next)
                 || IsKnownOption(schema, next)
-                || next is ArgumentOrCommandToken argument && argument is not ArgumentToken && schema.SubcommandDefinitions.ContainsKey(argument)
-                || IsNumericLikeType(property.Type) && next is OptionToken && !CanParseAsValue(next, property.Type))
+                || next is OptionToken optionToken && !CanConsumeOptionTokenAsPropertyValue(property.Type, optionToken)
+                || next is ArgumentOrCommandToken argument && argument is not ArgumentToken && schema.SubcommandDefinitions.ContainsKey(argument))
             {
                 break;
             }
 
             tokens.Add(ConvertToValueToken(next));
+            collectedForCurrentOption++;
             index++;
         }
 
@@ -941,6 +943,43 @@ public sealed class CliSchemaParser
         }
 
         return false;
+    }
+
+    private static bool CanConsumeOptionTokenAsPropertyValue(Type propertyType, OptionToken token)
+    {
+        if (IsNumericLikeType(propertyType))
+        {
+            return CanParseAsValue(token, propertyType);
+        }
+
+        if (!TryCreateContainerType(Nullable.GetUnderlyingType(propertyType) ?? propertyType, out var containerType))
+        {
+            return false;
+        }
+
+        if (containerType.KeyType is null)
+        {
+            return IsNumericLikeType(containerType.ValueType) && CanParseAsValue(token, containerType.ValueType);
+        }
+
+        return CanParseDictionaryKey(token, containerType.KeyType);
+    }
+
+    private static bool CanParseDictionaryKey(OptionToken token, Type keyType)
+    {
+        if (!IsNumericLikeType(keyType))
+        {
+            return false;
+        }
+
+        var value = ConvertToValueToken(token).Value;
+        var separatorIndex = value.IndexOf('=');
+        if (separatorIndex <= 0)
+        {
+            return false;
+        }
+
+        return CanParseAsValue(new ArgumentOrCommandToken(value[..separatorIndex]), keyType);
     }
 
     private static bool TryCreateContainerType(Type targetType, out ContainerType containerType)
