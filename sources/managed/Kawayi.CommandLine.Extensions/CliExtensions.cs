@@ -24,7 +24,7 @@ public static class CliExtensions
             ArgumentNullException.ThrowIfNull(result);
 
             var obj = new T();
-            obj.Bind(result);
+            obj.Bind(result, new BindingOptions());
             return obj;
         }
 

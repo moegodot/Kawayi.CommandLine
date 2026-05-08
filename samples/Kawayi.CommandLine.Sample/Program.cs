@@ -255,7 +255,7 @@ internal static class Program
                 return 0;
             case ParsingFinished<Cli> parsingFinished:
                 var command = new WorkspaceCommand();
-                ((IBindable)command).Bind(parsingFinished.Result);
+                ((IBindable)command).Bind(parsingFinished.Result, new BindingOptions());
                 PrintSuccess(command, parsingFinished.Result, Console.Out);
                 return 0;
             case InvalidArgumentDetected invalidArgumentDetected:

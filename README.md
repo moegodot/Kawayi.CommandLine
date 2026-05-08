@@ -174,6 +174,26 @@ static int Report(GotError error)
 
 生成的 schema 导出接口名是 `ICliSchemaExporter`。解析器会执行默认值工厂、必填检查和验证器；绑定阶段只用解析结果中存在的值覆盖命令对象，因此未输入且没有默认值工厂的可选成员会保留类型构造或属性初始化时的值。
 
+## CliSchemaParser 解析模型
+
+`[Command]` 生成的 `ExportParsing(options)` 会把 `Symbols` 中的 `ParameterDefinition`、`PropertyDefinition` 和 `CommandDefinition` 放入 `CliSchemaBuilder`。`CliSchemaBuilder.Build()` 冻结为不可变 `CliSchema` 时，会保留 `GeneratedFrom` 类型，按 `[Argument(position)]` 生成的位置参数顺序保存参数，把属性主名、长别名和短别名展开为可匹配的 option token，并为每个普通子命令连接子 schema。隐藏参数、隐藏选项、隐藏别名和隐藏子命令别名只影响帮助可见性，仍然会进入 schema 并保持可解析。
+
+解析从 token 扫描开始。`--help`、`-h`、`help`、`--version`、`-V` 和 `version` 会在当前 scope 内短路为帮助或版本结果；普通 `ArgumentOrCommandToken` 会优先匹配子命令，再作为位置参数候选；`ArgumentToken` 是被转义或位于 `--` 之后的参数，不会匹配子命令。未知 option 不会被字符串属性随意吞掉，最终会返回 `UnknownArgumentDetected`。
+
+位置参数按声明顺序和 `ValueRange` 分配。当前参数会尽量贪婪消费 token，但解析器会为后续参数保留它们的最小值数量；值数量不足或过多时返回 `InvalidArgumentDetected`。dash 前缀的 token 通常是 option，但当当前位置参数或当前属性需要数值类型且 token 能按 invariant culture 解析为数值时，`-1`、`-1.5` 这类 token 会被当作值处理。
+
+属性的默认取值数量来自属性类型。`bool` 的默认 `NumArgs` 是 `ZeroOrOne`，支持 `--flag` 作为 `true`，支持 `--flag=false` 或下一个 token 为 `true`/`false` 时的试探消费；如果下一个 token 不是布尔值或是子命令名，布尔属性不会消费它。不可变容器属性的默认 `NumArgs` 是 `ZeroOrMore`，其他属性默认是 `One`；显式 `[ValueRange]` 会覆盖这些默认值。长选项支持 `--name=value`，短选项支持 `-xVALUE`，内联值不会继续消费下一个 token。
+
+支持的标量目标类型包括所有整数类型、`float`、`double`、`decimal`、`bool`、`string`、`Guid`、`Uri`、`DateTime`、`DateTimeOffset`、`DateOnly`、`TimeOnly` 和 `enum`。整数使用 `NumberStyles.Integer` 和 invariant culture，浮点数与 `decimal` 使用 `NumberStyles.Float` 和 invariant culture，枚举解析忽略大小写。`string` 取最后一个 token 的文本，空 token 会得到空字符串。
+
+支持的不可变容器包括 `ImmutableArray<T>`、`ImmutableList<T>`、`ImmutableQueue<T>`、`ImmutableStack<T>`、`ImmutableHashSet<T>`、`ImmutableSortedSet<T>`、`ImmutableDictionary<TKey, TValue>` 和 `ImmutableSortedDictionary<TKey, TValue>`。序列容器逐 token 解析元素；字典容器要求每个 token 形如 `key=value`，其中 `\=` 表示字面等号，重复 key 会以后出现的值覆盖先出现的值。
+
+scope 内显式解析结束后，解析器会计算有效值。若用户提供了显式值，就使用显式值；若没有显式值且 definition 带有 `DefaultValueFactory`，就调用工厂并把返回值视为有效值。随后依次检查 `Requirement`、`RequirementIfNull` 和 `Validation`：`Requirement` 要求必须存在显式值或默认值，`RequirementIfNull` 要求有效值不能为 `null`，`Validation` 会同时作用于显式值和默认值，返回非空错误文本或抛出异常时都会变成 `FailedValidation`。
+
+`--` 是 option terminator。Tokenizer 会把它后面的原始输入变成 `ArgumentToken`；`CliSchemaParser` 会把这些 token 放入 `Cli.ToProgramArguments`，它们不再参与当前 schema 的参数、属性或子命令解析。响应文件替换也不会展开 `--` 后的 `ArgumentToken`，因此 `-- @file` 会把 `@file` 原样转发。
+
+普通子命令会先完成父 scope，然后返回 `Subcommand`；调用 `ContinueParseAction()` 后才解析子 scope，`ParseRecursively()` 可以持续展开到最终结果。`[Subcommand(global: true)]` 会把子命令的参数、属性和下级子命令提升到父 schema，并在绑定阶段总是实例化该子对象。生成的绑定逻辑只读取当前 `Cli` 结果中存在的值：已解析值和默认工厂值会覆盖对象属性，缺席且没有默认工厂的可选成员保留构造器或属性初始化值，未选择的普通子命令会绑定为 `null`。
+
 ## Sample
 
 Sample 覆盖了当前主要能力。以下命令请串行运行，避免并行构建时出现临时文件锁：

@@ -12,5 +12,6 @@ public interface IBindable
     /// Populates the current instance from parsing results.
     /// </summary>
     /// <param name="results">The parsed results to bind from.</param>
-    void Bind(Cli results);
+    /// <param name="bindingOptions">options for process binding</param>
+    void Bind(Cli results,BindingOptions bindingOptions);
 }

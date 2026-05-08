@@ -79,8 +79,15 @@
     <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(IsAnalyzerTestProject)' == 'true' OR '$(IsAnalyzerTestProject)' == 'true'" >
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>_generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(IsAnalyzerTestProject)' == 'true' OR '$(IsGeneratorTestProject)' == 'true'">
     <PackageReference Include="Microsoft.CodeAnalysis"/>
+    <Compile Remove="_generated/**/*.cs" />
+    <None Include="_generated/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

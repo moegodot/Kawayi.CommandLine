@@ -6,7 +6,7 @@
       <_BenchmarkDotNetVersion>0.15.8</_BenchmarkDotNetVersion>
       <_MinVerVersion>7.0.0</_MinVerVersion>
       <_TUnitVersion>1.28.0</_TUnitVersion>
-      <_NodaTimeVersion>3.3.1</_NodaTimeVersion>
+      <_NodaTimeVersion>3.3.2</_NodaTimeVersion>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,6 +14,7 @@
       <PackageVersion Include="MinVer" Version="$(_MinVerVersion)"/>
       <PackageVersion Include="TUnit" Version="$(_TUnitVersion)"/>
       <PackageVersion Include="NodaTime" Version="$(_NodaTimeVersion)"/>
+      <PackageVersion Include="NodaTime.Testing" Version="$(_NodaTimeVersion)" />
       <PackageVersion Include="Microsoft.CodeAnalysis" Version="$(_CodeAnalysisVersion)"/>
       <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(_CodeAnalysisVersion)"/>
       <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="$(_CodeAnalysisVersion)" />

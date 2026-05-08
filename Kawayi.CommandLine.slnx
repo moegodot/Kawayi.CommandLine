@@ -34,6 +34,7 @@
     <Project Path="sources/managed/Kawayi.CommandLine.Generator/Kawayi.CommandLine.Generator.csproj" />
     <Project Path="sources/managed/Kawayi.CommandLine/Kawayi.CommandLine.csproj" />
     <Project Path="sources/managed/Kawayi.Escapes/Kawayi.Escapes.csproj" />
+    <Project Path="sources/managed/Kawayi.Generator/Kawayi.Generator.csproj" />
     <Project Path="sources\managed\Kawayi.ExitCodes\Kawayi.ExitCodes.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -41,6 +42,7 @@
     <Project Path="tests/Kawayi.CommandLine.Core.Tests/Kawayi.CommandLine.Core.Tests.csproj" />
     <Project Path="tests/Kawayi.CommandLine.Generator.Tests/Kawayi.CommandLine.Generator.Tests.csproj" />
     <Project Path="tests/Kawayi.Escapes.Tests/Kawayi.Escapes.Tests.csproj" />
+    <Project Path="tests\Kawayi.CommandLine.Integration.Generator.Tests\Kawayi.CommandLine.Integration.Generator.Tests.csproj" />
     <Project Path="tests\Kawayi.ExitCodes.Tests\Kawayi.ExitCodes.Tests.csproj" />
   </Folder>
   <Folder Name="/vendors/" />

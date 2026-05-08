@@ -248,9 +248,21 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel,
-            "public void Bind(global::Kawayi.CommandLine.Abstractions.Cli results)");
+            "public void Bind(global::Kawayi.CommandLine.Abstractions.Cli results,global::Kawayi.CommandLine.Abstractions.BindingOptions bindingOptions)");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "{");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(results);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "global::System.ArgumentNullException.ThrowIfNull(bindingOptions);");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "if(bindingOptions.CheckGeneratedType)");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, $"if(results.Schema.GeneratedFrom != null && !results.Schema.GeneratedFrom.Equals(typeof({target.Model.TypeSymbol})))");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "{");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 3, $"throw new global::System.ArgumentException($\"the Cli.Schema.GeneratedFrom {{results.Schema.GeneratedFrom}} do not equals to current binding type {{typeof({target.Model.TypeSymbol})}}.\");");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 2, "}");
+        GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "}");
+        if (target.Members.Any(static item => item.Kind == MemberKind.Subcommand))
+        {
+            GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, "var nestedBindingOptions = bindingOptions with { CheckGeneratedType = false };");
+        }
 
         foreach (var member in target.Members.OrderBy(static item => item.DeclarationOrder))
         {
@@ -308,7 +320,7 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
             GeneratorSource.AppendIndentedLine(
                 builder,
                 indentLevel,
-                $"((global::Kawayi.CommandLine.Abstractions.IBindable){globalChildVariable}).Bind(results);");
+                $"((global::Kawayi.CommandLine.Abstractions.IBindable){globalChildVariable}).Bind(results, nestedBindingOptions);");
             GeneratorSource.AppendIndentedLine(builder, indentLevel, $"{propertyName} = {globalChildVariable};");
             return;
         }
@@ -330,7 +342,7 @@ public sealed class ExportBindingGenerator : IIncrementalGenerator
         GeneratorSource.AppendIndentedLine(
             builder,
             indentLevel + 1,
-            $"((global::Kawayi.CommandLine.Abstractions.IBindable){childVariable}).Bind({resultVariable});");
+            $"((global::Kawayi.CommandLine.Abstractions.IBindable){childVariable}).Bind({resultVariable},nestedBindingOptions);");
         GeneratorSource.AppendIndentedLine(builder, indentLevel + 1, $"{propertyName} = {childVariable};");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "}");
         GeneratorSource.AppendIndentedLine(builder, indentLevel, "else");

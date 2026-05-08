@@ -533,6 +533,49 @@ public class ExportBindingGeneratorTests
     }
 
     [Test]
+    public async Task Binding_Throws_For_Mismatched_Root_Command_Type()
+    {
+        const string source = """
+            using Kawayi.CommandLine.Core.Attributes;
+
+            namespace Fixtures;
+
+            [Command]
+            public partial class FirstCommand
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+            }
+
+            [Command]
+            public partial class SecondCommand
+            {
+                /// <summary>
+                /// Input summary
+                /// </summary>
+                [Argument(0, require: true)]
+                [ValueRange(1, 1)]
+                public string Input { get; set; } = string.Empty;
+            }
+            """;
+
+        var result = RunGenerator(source, "Fixtures.FirstCommand");
+        var builder = GetCliSchemaBuilder(result, "Fixtures.FirstCommand");
+        ImmutableArray<Token> arguments =
+        [
+            new ArgumentOrCommandToken("payload")
+        ];
+
+        var scope = AssertFinishedCollection(CliSchemaParser.CreateParsing(CreateOptions(), arguments, builder.Build()));
+
+        await Assert.That(() => Bind(result, "Fixtures.SecondCommand", scope)).Throws<ArgumentException>();
+    }
+
+    [Test]
     public async Task Symbol_Errors_Suppress_Binding_Output_Without_CSharp_Cascade()
     {
         const string source = """
@@ -682,7 +725,7 @@ public class ExportBindingGeneratorTests
         }
 
         var runResult = driver.GetRunResult();
-        return new GeneratorRunOutcome(outputCompilation, runResult, targetTypeMetadataName);
+        return new GeneratorRunOutcome(outputCompilation, runResult, targetTypeMetadataName, new Lazy<System.Reflection.Assembly>(() => LoadAssembly(outputCompilation)));
     }
 
     private static ImmutableArray<MetadataReference> CreateMetadataReferences()
@@ -720,14 +763,19 @@ public class ExportBindingGeneratorTests
         var targetType = GetEmittedType(outcome, targetTypeMetadataName);
         var instance = Activator.CreateInstance(targetType)
             ?? throw new InvalidOperationException("Could not create the generated binding target type.");
-        ((IBindable)instance).Bind(result);
+        ((IBindable)instance).Bind(result, new BindingOptions());
         return instance;
     }
 
     private static Type GetEmittedType(GeneratorRunOutcome outcome, string targetTypeMetadataName)
     {
+        return outcome.LoadedAssembly.Value.GetType(targetTypeMetadataName, throwOnError: true)!;
+    }
+
+    private static System.Reflection.Assembly LoadAssembly(Compilation compilation)
+    {
         using var assemblyStream = new MemoryStream();
-        var emitResult = outcome.Compilation.Emit(assemblyStream);
+        var emitResult = compilation.Emit(assemblyStream);
         if (!emitResult.Success)
         {
             throw new InvalidOperationException(
@@ -735,8 +783,7 @@ public class ExportBindingGeneratorTests
         }
 
         assemblyStream.Position = 0;
-        var assembly = System.Reflection.Assembly.Load(assemblyStream.ToArray());
-        return assembly.GetType(targetTypeMetadataName, throwOnError: true)!;
+        return System.Reflection.Assembly.Load(assemblyStream.ToArray());
     }
 
     private static ParsingResult ContinueSubcommands(ParsingResult result)
@@ -807,5 +854,6 @@ public class ExportBindingGeneratorTests
     private sealed record GeneratorRunOutcome(
         Compilation Compilation,
         GeneratorDriverRunResult RunResult,
-        string TargetTypeMetadataName);
+        string TargetTypeMetadataName,
+        Lazy<System.Reflection.Assembly> LoadedAssembly);
 }
