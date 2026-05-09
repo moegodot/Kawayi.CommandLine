@@ -41,17 +41,21 @@ public static class CliExtensions
     extension(Cli result)
     {
         /// <summary>
-        /// Creates a new bindable command object and populates it from the parsing result collection.
+        /// Creates a new command object and populates it from the parsing result collection.
         /// </summary>
         /// <returns>The populated command object.</returns>
-        public T Bind<T>()
-            where T : IBindable, new()
+        public T Bind<
+            [DynamicallyAccessedMembers(
+                DynamicallyAccessedMemberTypes.Interfaces |
+                DynamicallyAccessedMemberTypes.PublicProperties |
+                DynamicallyAccessedMemberTypes.NonPublicProperties |
+                DynamicallyAccessedMemberTypes.PublicConstructors)]
+            T>()
+            where T : new()
         {
             ArgumentNullException.ThrowIfNull(result);
 
-            var obj = new T();
-            obj.Bind(result, new BindingOptions());
-            return obj;
+            return Binder.Bind(new T(), result, new BindingOptions());
         }
 
         /// <summary>

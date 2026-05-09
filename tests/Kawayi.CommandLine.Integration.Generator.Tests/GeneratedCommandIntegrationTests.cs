@@ -19,12 +19,10 @@ public sealed class GeneratedCommandIntegrationTests
     {
         using var output = new StringWriter();
         var options = CreateOptions(output);
-        var schema = SchemaCommand.ExportSchema(options);
+        var schema = CliSchemaGenerator.GenerateFor<SchemaCommand>();
 
-        await Assert.That(typeof(ICliSchemaExporter).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
-        await Assert.That(typeof(IBindable).IsAssignableFrom(typeof(SchemaCommand))).IsTrue();
         await Assert.That(typeof(SchemaCommand).GetMethod("CreateParsing", BindingFlags.Public | BindingFlags.Static)).IsNull();
-        await Assert.That(typeof(SchemaCommand).GetMethod("ExportSchema", BindingFlags.Public | BindingFlags.Static)).IsNotNull();
+        await Assert.That(typeof(SchemaCommand).GetMethod("ExportSchema", BindingFlags.Public | BindingFlags.Static)).IsNull();
         await Assert.That(typeof(SchemaCommand).GetMethod("ExportParsing", BindingFlags.Public | BindingFlags.Static)).IsNull();
         await Assert.That(SchemaCommand.Documents.Keys).Contains("Input");
         await Assert.That(SchemaCommand.Symbols.Length).IsGreaterThanOrEqualTo(6);
@@ -296,33 +294,29 @@ public sealed class GeneratedCommandIntegrationTests
     }
 
     private static TCommand ParseAndBind<TCommand>(params string[] arguments)
-        where TCommand : ICliSchemaExporter, IBindable, new()
+        where TCommand : new()
     {
         return ParseCli<TCommand>(arguments).Bind<TCommand>();
     }
 
     private static Cli ParseCli<TCommand>(params string[] arguments)
-        where TCommand : ICliSchemaExporter
     {
         return ParseCli<TCommand>(Tokenize(arguments));
     }
 
     private static Cli ParseCli<TCommand>(ImmutableArray<Token> tokens)
-        where TCommand : ICliSchemaExporter
     {
-        return AssertFinished(TCommand.ExportSchema(CreateOptions()).Parse(tokens, CreateOptions()));
+        return AssertFinished(CliSchemaGenerator.GenerateFor<TCommand>().Parse(tokens, CreateOptions()));
     }
 
     private static ParsingResult Parse<TCommand>(params string[] arguments)
-        where TCommand : ICliSchemaExporter
     {
-        return TCommand.ExportSchema(CreateOptions()).Parse(Tokenize(arguments), CreateOptions());
+        return CliSchemaGenerator.GenerateFor<TCommand>().Parse(Tokenize(arguments), CreateOptions());
     }
 
     private static ParsingResult StartParse<TCommand>(ImmutableArray<Token> tokens)
-        where TCommand : ICliSchemaExporter
     {
-        return CliSchemaParser.CreateParsing(CreateOptions(), tokens, TCommand.ExportSchema(CreateOptions()));
+        return CliSchemaParser.CreateParsing(CreateOptions(), tokens, CliSchemaGenerator.GenerateFor<TCommand>());
     }
 
     private static ImmutableArray<Token> Tokenize(params string[] arguments)

@@ -65,7 +65,7 @@ internal static class Program
         "workspace-demo",
         new Document(
             "Attribute-first command line showcase",
-            "Demonstrates attribute-driven command metadata and generated immutable parsing schemas."),
+            "Demonstrates attribute-driven command metadata and runtime-reflected immutable parsing schemas."),
         new Version(1, 0, 0),
         "https://github.com/moegodot/");
 
@@ -83,7 +83,7 @@ internal static class Program
         var rawTokens = tokenizer.Tokenize([.. effectiveArguments]);
         var tokens = new ResponseFileReplacer(tokenizer).Replace(rawTokens);
 
-        var schema = WorkspaceCommand.ExportSchema(parsingOptions);
+        var schema = CliSchemaGenerator.GenerateFor<WorkspaceCommand>();
         var result = schema.Parse(tokens, parsingOptions);
         return HandleResult(result);
     }
@@ -112,21 +112,17 @@ internal static class Program
     }
 
     private static void PrintOverview<T>(TextWriter output, ParsingOptions options)
-        where T : IDocumentExporter, ISymbolExporter, ICliSchemaExporter
+        where T : IDocumentExporter, ISymbolExporter
     {
-        var generatedSchema = T.ExportSchema(options);
-        var reflectionSchema = CliSchemaGenerator.GenerateFor<T>();
-        var generatedWarmupResult = generatedSchema.Parse([new LongOptionToken("help")], options);
-        var reflectionWarmupResult = reflectionSchema.Parse([new LongOptionToken("help")], options);
+        var schema = CliSchemaGenerator.GenerateFor<T>();
+        var warmupResult = schema.Parse([new LongOptionToken("help")], options);
 
         output.WriteLine("Kawayi.CommandLine Attribute Max Demo");
         output.WriteLine($"Documents: {T.Documents.Count}");
         output.WriteLine($"Symbols: {T.Symbols.Length}");
-        output.WriteLine($"Generated root surface: {generatedSchema.Argument.Count} arguments, {generatedSchema.Properties.Values.Distinct().Count()} options, {generatedSchema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
-        output.WriteLine($"Reflection root surface: {reflectionSchema.Argument.Count} arguments, {reflectionSchema.Properties.Values.Distinct().Count()} options, {reflectionSchema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
+        output.WriteLine($"Reflection root surface: {schema.Argument.Count} arguments, {schema.Properties.Values.Distinct().Count()} options, {schema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
         output.WriteLine($"Custom type providers: {options.TypeProviders.Providers.Count} exact, {options.TypeProviders.ExtendedProviders.Length} extended");
-        output.WriteLine($"Warm-up via generated CliSchema.Parse(...): {generatedWarmupResult.GetType().Name}");
-        output.WriteLine($"Warm-up via reflection CliSchema.Parse(...): {reflectionWarmupResult.GetType().Name}");
+        output.WriteLine($"Warm-up via reflection CliSchema.Parse(...): {warmupResult.GetType().Name}");
         output.WriteLine();
     }
 
@@ -143,8 +139,7 @@ internal static class Program
                 versionFlagsDetected.FlagAction();
                 return 0;
             case ParsingFinished<Cli> parsingFinished:
-                var command = new WorkspaceCommand();
-                ((IBindable)command).Bind(parsingFinished.Result, new BindingOptions());
+                var command = parsingFinished.Result.Bind<WorkspaceCommand>();
                 var reflectionCommand = Binder.Bind(new WorkspaceCommand(), parsingFinished.Result, new BindingOptions());
                 PrintSuccess(command, (WorkspaceCommand)reflectionCommand, parsingFinished.Result, Console.Out);
                 return 0;

@@ -16,11 +16,3 @@ KCLG110 | Kawayi.CommandLine.Generator | Error | Validator method must be a matc
 KCLG111 | Kawayi.CommandLine.Generator | Warning | Subcommand property should be nullable
 KCLG112 | Kawayi.CommandLine.Generator | Error | RequirementIfNull member must be nullable
 KCLG113 | Kawayi.CommandLine.Generator | Error | Required subcommands are not supported
-KCLG201 | Kawayi.CommandLine.Generator | Error | ExportParsing target must be partial
-KCLG202 | Kawayi.CommandLine.Generator | Error | ExportParsing target must provide symbols
-KCLG203 | Kawayi.CommandLine.Generator | Error | Subcommand type must provide schema exports
-KCLG301 | Kawayi.CommandLine.Generator | Error | Bindable target must be partial
-KCLG302 | Kawayi.CommandLine.Generator | Error | Bindable target must provide symbols
-KCLG303 | Kawayi.CommandLine.Generator | Error | Bindable member must be assignable
-KCLG304 | Kawayi.CommandLine.Generator | Error | Subcommand type must provide binding exports
-KCLG305 | Kawayi.CommandLine.Generator | Error | Subcommand type must have an accessible parameterless constructor

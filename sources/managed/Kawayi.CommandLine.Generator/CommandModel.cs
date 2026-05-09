@@ -15,8 +15,6 @@ internal static class MetadataNames
 {
     public const string ExportDocumentAttribute = "Kawayi.CommandLine.Core.Attributes.ExportDocumentAttribute";
     public const string ExportSymbolsAttribute = "Kawayi.CommandLine.Core.Attributes.ExportSymbolsAttribute";
-    public const string ExportParsingAttribute = "Kawayi.CommandLine.Core.Attributes.ExportParsingAttribute";
-    public const string BindableAttribute = "Kawayi.CommandLine.Core.Attributes.BindableAttribute";
     public const string CommandAttribute = "Kawayi.CommandLine.Core.Attributes.CommandAttribute";
     public const string ArgumentAttribute = "Kawayi.CommandLine.Core.Attributes.ArgumentAttribute";
     public const string PropertyAttribute = "Kawayi.CommandLine.Core.Attributes.PropertyAttribute";
@@ -29,8 +27,6 @@ internal static class MetadataNames
 
     public const string DocumentExporter = "Kawayi.CommandLine.Abstractions.IDocumentExporter";
     public const string SymbolExporter = "Kawayi.CommandLine.Abstractions.ISymbolExporter";
-    public const string CliSchemaExporter = "Kawayi.CommandLine.Abstractions.ICliSchemaExporter";
-    public const string Bindable = "Kawayi.CommandLine.Abstractions.IBindable";
 }
 
 internal static class GeneratorFormats
@@ -61,12 +57,8 @@ internal sealed class CommandModel
         bool hasCommandAttribute,
         bool hasExportDocumentAttribute,
         bool hasExportSymbolsAttribute,
-        bool hasExportParsingAttribute,
-        bool hasBindableAttribute,
         bool implementsDocumentExporter,
         bool implementsSymbolExporter,
-        bool implementsCliSchemaExporter,
-        bool implementsBindable,
         ImmutableArray<MemberModel> members,
         ImmutableArray<DiagnosticInfo> symbolDiagnostics)
     {
@@ -75,12 +67,8 @@ internal sealed class CommandModel
         HasCommandAttribute = hasCommandAttribute;
         HasExportDocumentAttribute = hasExportDocumentAttribute;
         HasExportSymbolsAttribute = hasExportSymbolsAttribute;
-        HasExportParsingAttribute = hasExportParsingAttribute;
-        HasBindableAttribute = hasBindableAttribute;
         ImplementsDocumentExporter = implementsDocumentExporter;
         ImplementsSymbolExporter = implementsSymbolExporter;
-        ImplementsCliSchemaExporter = implementsCliSchemaExporter;
-        ImplementsBindable = implementsBindable;
         Members = members;
         SymbolDiagnostics = symbolDiagnostics;
     }
@@ -95,17 +83,9 @@ internal sealed class CommandModel
 
     public bool HasExportSymbolsAttribute { get; }
 
-    public bool HasExportParsingAttribute { get; }
-
-    public bool HasBindableAttribute { get; }
-
     public bool ImplementsDocumentExporter { get; }
 
     public bool ImplementsSymbolExporter { get; }
-
-    public bool ImplementsCliSchemaExporter { get; }
-
-    public bool ImplementsBindable { get; }
 
     public ImmutableArray<MemberModel> Members { get; }
 
@@ -336,12 +316,8 @@ internal sealed class CommandModel
             HasAttribute(typeSymbol, MetadataNames.CommandAttribute),
             HasAttribute(typeSymbol, MetadataNames.ExportDocumentAttribute),
             HasAttribute(typeSymbol, MetadataNames.ExportSymbolsAttribute),
-            HasAttribute(typeSymbol, MetadataNames.ExportParsingAttribute),
-            HasAttribute(typeSymbol, MetadataNames.BindableAttribute),
             ImplementsInterface(typeSymbol, MetadataNames.DocumentExporter),
             ImplementsInterface(typeSymbol, MetadataNames.SymbolExporter),
-            ImplementsInterface(typeSymbol, MetadataNames.CliSchemaExporter),
-            ImplementsInterface(typeSymbol, MetadataNames.Bindable),
             members.ToImmutable(),
             diagnostics.ToImmutable());
     }

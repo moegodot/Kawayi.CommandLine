@@ -4,7 +4,7 @@
 namespace Kawayi.CommandLine.Abstractions;
 
 /// <summary>
-/// options for <see cref="IBindable.Bind"/>
+/// Options for runtime reflection binding.
 /// </summary>
 /// <param name="CheckGeneratedType">true to check current type matches <see cref="CliSchema.GeneratedFrom"/></param>
 public record BindingOptions(bool CheckGeneratedType = true);
