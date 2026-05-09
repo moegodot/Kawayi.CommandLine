@@ -114,15 +114,19 @@ internal static class Program
     private static void PrintOverview<T>(TextWriter output, ParsingOptions options)
         where T : IDocumentExporter, ISymbolExporter, ICliSchemaExporter
     {
-        var schema = T.ExportSchema(options);
-        var warmupResult = schema.Parse([new LongOptionToken("help")], options);
+        var generatedSchema = T.ExportSchema(options);
+        var reflectionSchema = CliSchemaGenerator.GenerateFor<T>();
+        var generatedWarmupResult = generatedSchema.Parse([new LongOptionToken("help")], options);
+        var reflectionWarmupResult = reflectionSchema.Parse([new LongOptionToken("help")], options);
 
         output.WriteLine("Kawayi.CommandLine Attribute Max Demo");
         output.WriteLine($"Documents: {T.Documents.Count}");
         output.WriteLine($"Symbols: {T.Symbols.Length}");
-        output.WriteLine($"Root surface: {schema.Argument.Count} arguments, {schema.Properties.Values.Distinct().Count()} options, {schema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
+        output.WriteLine($"Generated root surface: {generatedSchema.Argument.Count} arguments, {generatedSchema.Properties.Values.Distinct().Count()} options, {generatedSchema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
+        output.WriteLine($"Reflection root surface: {reflectionSchema.Argument.Count} arguments, {reflectionSchema.Properties.Values.Distinct().Count()} options, {reflectionSchema.SubcommandDefinitions.Values.Distinct().Count()} subcommands");
         output.WriteLine($"Custom type providers: {options.TypeProviders.Providers.Count} exact, {options.TypeProviders.ExtendedProviders.Length} extended");
-        output.WriteLine($"Warm-up via CliSchema.Parse(...): {warmupResult.GetType().Name}");
+        output.WriteLine($"Warm-up via generated CliSchema.Parse(...): {generatedWarmupResult.GetType().Name}");
+        output.WriteLine($"Warm-up via reflection CliSchema.Parse(...): {reflectionWarmupResult.GetType().Name}");
         output.WriteLine();
     }
 
@@ -141,7 +145,8 @@ internal static class Program
             case ParsingFinished<Cli> parsingFinished:
                 var command = new WorkspaceCommand();
                 ((IBindable)command).Bind(parsingFinished.Result, new BindingOptions());
-                PrintSuccess(command, parsingFinished.Result, Console.Out);
+                var reflectionCommand = Binder.Bind(new WorkspaceCommand(), parsingFinished.Result, new BindingOptions());
+                PrintSuccess(command, (WorkspaceCommand)reflectionCommand, parsingFinished.Result, Console.Out);
                 return 0;
             case InvalidArgumentDetected invalidArgumentDetected:
                 PrintError("Invalid argument", $"{invalidArgumentDetected.Argument}: expected {invalidArgumentDetected.Expect}", invalidArgumentDetected.Exception);
@@ -173,11 +178,12 @@ internal static class Program
         return current;
     }
 
-    private static void PrintSuccess(WorkspaceCommand command, Cli cli, TextWriter output)
+    private static void PrintSuccess(WorkspaceCommand command, WorkspaceCommand reflectionCommand, Cli cli, TextWriter output)
     {
         output.WriteLine("Parse succeeded.");
         output.WriteLine($"Command path: {BuildCommandPath(command)}");
         output.WriteLine($"ToProgramArguments: {DescribeValue(cli.ToProgramArguments)}");
+        output.WriteLine($"Reflection binder parity: {DescribeReflectionParity(command, reflectionCommand)}");
         output.WriteLine();
         PrintBoundCommand(command, output);
     }
@@ -310,6 +316,18 @@ internal static class Program
         }
 
         return DescribeValue(item);
+    }
+
+    private static string DescribeReflectionParity(WorkspaceCommand generatedCommand, WorkspaceCommand reflectionCommand)
+    {
+        var sameInput = StringComparer.Ordinal.Equals(generatedCommand.Input, reflectionCommand.Input);
+        var sameFormat = StringComparer.Ordinal.Equals(generatedCommand.Format, reflectionCommand.Format);
+        var sameServe = generatedCommand.Serve is null == reflectionCommand.Serve is null;
+        var sameVersions = generatedCommand.SupportedVersions.IsDefault == reflectionCommand.SupportedVersions.IsDefault
+                           && (generatedCommand.SupportedVersions.IsDefault
+                               || generatedCommand.SupportedVersions.SequenceEqual(reflectionCommand.SupportedVersions));
+
+        return sameInput && sameFormat && sameServe && sameVersions ? "matched" : "diverged";
     }
 }
 
@@ -553,6 +571,13 @@ public partial class WorkspaceCommand
 /// Root-level promoted options provided through a global subcommand.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class GlobalOptionsCommand
 {
     /// <summary>
@@ -580,6 +605,13 @@ public partial class GlobalOptionsCommand
 /// First-level subcommand for server-oriented operations.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class ServeCommand
 {
     /// <summary>
@@ -629,6 +661,13 @@ public partial class ServeCommand
 /// Second-level subcommand for watch-style workflows.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class WatchCommand
 {
     /// <summary>

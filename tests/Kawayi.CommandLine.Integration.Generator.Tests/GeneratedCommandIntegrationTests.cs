@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3-or-later license.
 
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Kawayi.CommandLine.Abstractions;
 using Kawayi.CommandLine.Core;
@@ -229,6 +230,18 @@ public sealed class GeneratedCommandIntegrationTests
     }
 
     [Test]
+    public async Task Runtime_Binder_Binds_Into_Generated_Command_Types()
+    {
+        var cli = ParseCli<SchemaCommand>("payload", "--format", "json", "--verbose", "serve");
+        var command = Kawayi.CommandLine.Core.Binder.Bind(new SchemaCommand(), cli, new BindingOptions());
+
+        await Assert.That(command.Input).IsEqualTo("payload");
+        await Assert.That(command.OutputFormat).IsEqualTo("json");
+        await Assert.That(command.Verbose).IsTrue();
+        await Assert.That(command.Serve).IsNotNull();
+    }
+
+    [Test]
     public async Task Requirement_And_Validators_Report_Errors()
     {
         await Assert.That(Parse<RequiredCommand>()).IsTypeOf<InvalidArgumentDetected>();
@@ -425,6 +438,13 @@ public partial class SchemaCommand
 /// Schema serve command.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class SchemaServeCommand
 {
 }
@@ -639,6 +659,13 @@ public partial class VerboseInlineCommand
 /// Bool run command.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class BoolRunCommand
 {
 }
@@ -820,6 +847,13 @@ public partial class SubcommandRoot
 /// Serve command.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class SubcommandServe
 {
     /// <summary>Host value.</summary>
@@ -841,6 +875,13 @@ public partial class SubcommandServe
 /// Watch command.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class SubcommandWatch
 {
     /// <summary>Interval value.</summary>
@@ -869,6 +910,13 @@ public partial class GlobalRoot
 /// Global options.
 /// </summary>
 [Command]
+[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.Interfaces |
+    DynamicallyAccessedMemberTypes.PublicProperties |
+    DynamicallyAccessedMemberTypes.NonPublicProperties |
+    DynamicallyAccessedMemberTypes.PublicMethods |
+    DynamicallyAccessedMemberTypes.NonPublicMethods |
+    DynamicallyAccessedMemberTypes.PublicConstructors)]
 public partial class GlobalOptions
 {
     /// <summary>Force value.</summary>

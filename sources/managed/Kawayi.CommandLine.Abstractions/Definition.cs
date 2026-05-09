@@ -23,6 +23,7 @@ public sealed record CommandDefinition(DefinitionInformation Information,
 /// <param name="Type">The CLR type bound to the definition.</param>
 /// <param name="Requirement">Whether the definition is required.</param>
 /// <param name="RequirementIfNull">Whether the definition is required when its effective value is null.</param>
+/// <param name="Format">Gets the optional format hint used by parsers for this definition.</param>
 public abstract record TypedDefinition(
     DefinitionInformation Information,
     Symbol? ParentSymbol,
@@ -30,7 +31,8 @@ public abstract record TypedDefinition(
     [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type Type,
     bool Requirement,
-    bool RequirementIfNull = false) : Symbol(Information, ParentSymbol)
+    bool RequirementIfNull = false,
+    string? Format = null) : Symbol(Information, ParentSymbol)
 {
     /// <summary>
     /// the factory to get the default value,
@@ -43,11 +45,6 @@ public abstract record TypedDefinition(
     /// return null if the value is valid, or return the error message.
     /// </summary>
     public Func<object, string?>? Validation { get; init; }
-
-    /// <summary>
-    /// Gets the optional format hint used by parsers for this definition.
-    /// </summary>
-    public string? Format { get; init; }
 }
 
 /// <summary>
